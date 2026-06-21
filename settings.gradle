@@ -1,4 +1,9 @@
-rootProject.name = 'demo'
+pluginManagement {
+    plugins {
+        id 'org.jetbrains.kotlin.jvm' version '2.4.0'
+    }
+}
+rootProject.name = 'stock-analyzer'
 
 dependencyResolutionManagement {
     repositories {
