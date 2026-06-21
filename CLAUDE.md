@@ -70,8 +70,8 @@ Registrar em `.claude/settings.json` após subir a aplicação:
 {
   "mcpServers": {
     "stock-analyzer": {
-      "type": "sse",
-      "url": "http://localhost:8080/sse"
+      "type": "http",
+      "url": "http://localhost:4000/mcp"
     }
   }
 }
