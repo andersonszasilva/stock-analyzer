@@ -404,38 +404,38 @@ Para verificar as ferramentas disponíveis no terminal: `/mcp`
 
 ### Fase 1 — Domínio e Persistência
 
-- [ ] **T1** — Criar `Asset` e `FinancialStatement` (data classes de domínio) e enum `StatementPeriod`
-- [ ] **T2** — Criar interfaces `AssetRepository` e `FinancialStatementRepository` (domínio)
-- [ ] **T3** — Criar `AssetJpaEntity` e `FinancialStatementJpaEntity` com anotações JPA
-- [ ] **T4** — Criar mappers (domain ↔ JPA entity)
-- [ ] **T5** — Criar repositórios Spring Data e adapters
-- [ ] **T6** — Criar migration SQL (tabelas `assets` e `financial_statements`)
+- [x] **T1** — Criar `Asset` e `FinancialStatement` (data classes de domínio) e enum `StatementPeriod`
+- [x] **T2** — Criar interfaces `AssetRepository` e `FinancialStatementRepository` (domínio)
+- [x] **T3** — Criar `AssetJpaEntity` e `FinancialStatementJpaEntity` com anotações JPA
+- [x] **T4** — Criar mappers (domain ↔ JPA entity)
+- [x] **T5** — Criar repositórios Spring Data e adapters
+- [x] **T6** — Criar migration SQL (tabelas `assets` e `financial_statements`)
 
 ### Fase 2 — Aplicação (Cálculos)
 
-- [ ] **T7** — Criar `FinancialIndicators` e `AnalysisRequest`
-- [ ] **T8** — Implementar `IndicatorCalculationEngine` com todos os indicadores
-- [ ] **T9** — Escrever testes unitários de `IndicatorCalculationEngine` com dados reais de balanço
-- [ ] **T10** — Criar `AssetUseCase` / `AssetService` e `FinancialStatementUseCase` / `FinancialStatementService`
+- [x] **T7** — Criar `FinancialIndicators` e `AnalysisRequest`
+- [x] **T8** — Implementar `IndicatorCalculationEngine` com todos os indicadores
+- [x] **T9** — Escrever testes unitários de `IndicatorCalculationEngine` com dados reais de balanço
+- [x] **T10** — Criar `AssetUseCase` / `AssetService` e `FinancialStatementUseCase` / `FinancialStatementService`
 
 ### Fase 3 — Interface Web
 
-- [ ] **T11** — Criar `AssetForm`, `AssetController` e templates (`assets/list.html`, `assets/form.html`)
-- [ ] **T12** — Criar `FinancialStatementForm`, `FinancialStatementController` e templates (`statements/list.html`, `statements/form.html`)
+- [x] **T11** — Criar `AssetForm`, `AssetController` e templates (`assets/list.html`, `assets/form.html`)
+- [x] **T12** — Criar `FinancialStatementForm`, `FinancialStatementController` e templates (`statements/list.html`, `statements/form.html`)
 
 ### Fase 4 — Ferramentas MCP
 
-- [ ] **T13** — Adicionar dependência `spring-ai-mcp-server-webmvc-spring-boot-starter` no `build.gradle`
-- [ ] **T14** — Implementar `FinancialStatementTools` com todas as ferramentas `@Tool`
-- [ ] **T15** — Registrar o servidor MCP no `.claude/settings.json`
-- [ ] **T16** — Escrever testes unitários de `FinancialStatementTools` com mocks
+- [x] **T13** — Adicionar dependência `spring-ai-mcp-server-webmvc-spring-boot-starter` no `build.gradle`
+- [x] **T14** — Implementar `FinancialStatementTools` com todas as ferramentas `@Tool`
+- [x] **T15** — Registrar o servidor MCP no `.claude/settings.json`
+- [x] **T16** — Escrever testes unitários de `FinancialStatementTools` com mocks
 
 ### Fase 5 — Testes e Ajustes
 
-- [ ] **T17** — `@WebMvcTest` dos controllers
-- [ ] **T18** — `@DataJpaTest` dos repositórios
-- [ ] **T19** — Validação manual: cadastrar via web, analisar via terminal com DRE real
-- [ ] **T20** — Refinar descrições das ferramentas `@Tool` com base no uso real
+- [x] **T17** — `@WebMvcTest` dos controllers
+- [x] **T18** — `@DataJpaTest` dos repositórios
+- [x] **T19** — Validação manual: cadastrar via web, analisar via terminal com DRE real
+- [x] **T20** — Refinar descrições das ferramentas `@Tool` com base no uso real
 
 ---
 
