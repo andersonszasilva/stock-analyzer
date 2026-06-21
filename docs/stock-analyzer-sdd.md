@@ -1,10 +1,15 @@
-# SDD — Analisador de Ações por DRE com IA
+# SDD — Analisador de Ações por DRE com IA (MCP)
 
 ## 1. Objetivo
 
-Permitir que o usuário cadastre demonstrações de resultado (DRE) de ativos por período e solicite análises financeiras geradas por IA. A IA calcula indicadores fundamentalistas, interpreta tendências e emite um parecer sobre a saúde financeira do ativo.
+Prover uma aplicação com dois canais de acesso complementares:
 
-**Exemplos de uso:**
+- **Interface web (Thymeleaf)** — cadastro de ativos e suas DREs
+- **Servidor MCP** — ferramentas que o modelo de IA no terminal invoca para consultar DREs e calcular indicadores fundamentalistas
+
+A análise narrativa e o parecer sobre o ativo acontecem no terminal, com o modelo chamando as ferramentas MCP conforme necessário.
+
+**Exemplos de uso no terminal:**
 - _"Calcule o ROE e ROIC de ITUB4 com base nos últimos 4 trimestres"_
 - _"A empresa está gerando caixa livre suficiente para sustentar os dividendos?"_
 - _"Qual o preço justo pelo método DCF com taxa de desconto de 10%?"_
@@ -16,14 +21,15 @@ Permitir que o usuário cadastre demonstrações de resultado (DRE) de ativos po
 
 ### Incluído
 
-- Cadastro de DRE por ativo e período (trimestral ou anual)
-- Cálculo automático de indicadores fundamentalistas
-- Análise narrativa gerada pela Claude API
-- Dashboard de análise com indicadores e parecer da IA
-- Histórico de DREs por ativo
+- Cadastro de ativos (código, nome, setor) via interface web
+- Cadastro de DRE por ativo e período (trimestral ou anual) via interface web
+- Histórico de DREs por ativo na interface web
+- Cálculo automático de indicadores fundamentalistas via ferramenta MCP
+- Servidor MCP com transporte HTTP/SSE (Spring AI MCP Server)
 
 ### Excluído (v1)
 
+- Análise narrativa na interface web (acontece no terminal)
 - Importação automática de DRE via B3 ou CVM
 - Upload de PDF de DRE
 - Comparação entre ativos distintos (análise cross-asset)
@@ -34,117 +40,116 @@ Permitir que o usuário cadastre demonstrações de resultado (DRE) de ativos po
 ## 3. Arquitetura
 
 ```
-Usuário (browser)
-      │
-      │  Thymeleaf + Bootstrap
-      ▼
-FinancialStatementController   ← CRUD de DREs
-StockAnalysisController        ← solicita análise
-      │
-      │  Use case interfaces
-      ▼
-FinancialStatementService      ← persistência de DREs
-StockAnalysisService           ← orquestra cálculos + IA
-IndicatorCalculationEngine     ← cálculos fundamentalistas
-      │                  │
-      │                  │  HTTP / Claude API
-      │                  ▼
-      │           ClaudeAiClient          ← integração com Anthropic
-      │
-      │  JPA / Hibernate
-      ▼
-   MySQL (tabela financial_statements)
+Terminal (Claude Code + MCP)          Usuário (browser)
+         │                                    │
+         │  MCP (HTTP/SSE)                    │  Thymeleaf + Bootstrap
+         ▼                                    ▼
+FinancialStatementTools          AssetController
+IndicatorTools                   FinancialStatementController
+         │                                    │
+         └──────────────┬─────────────────────┘
+                        │  Use case interfaces
+                        ▼
+              AssetService
+              FinancialStatementService
+              IndicatorCalculationEngine
+                        │
+                        │  JPA / Hibernate
+                        ▼
+                   PostgreSQL
 ```
 
-### Fluxo principal
+### Fluxo — cadastro de dados (web)
 
 ```
-1. Usuário cadastra DRE de um ativo (formulário)
-2. Usuário clica em "Analisar"
-3. StockAnalysisService busca as DREs do ativo
-4. IndicatorCalculationEngine calcula os indicadores
-5. ClaudeAiClient envia os indicadores + dados brutos à IA
-6. IA retorna análise estruturada (JSON + narrativa)
-7. Dashboard exibe indicadores e parecer
+1. Usuário acessa a interface web e cadastra um ativo (código + nome)
+2. Usuário cadastra DREs do ativo por período
+```
+
+### Fluxo — análise (terminal)
+
+```
+1. Usuário pede ao modelo no terminal para analisar um ativo
+2. Modelo chama a ferramenta MCP `find_statements_by_asset`
+3. Modelo chama a ferramenta MCP `calculate_indicators`
+4. Modelo recebe os indicadores e produz a análise narrativa
+5. Usuário lê o parecer diretamente no terminal
 ```
 
 ---
 
 ## 4. Modelo de Domínio
 
-### 4.1 FinancialStatement
+### 4.1 Asset
 
-```java
-// domain/model/FinancialStatement.java
-public record FinancialStatement(
-    UUID id,
-    UUID assetId,
-    int year,
-    StatementPeriod period,       // Q1, Q2, Q3, Q4, ANNUAL
-    BigDecimal netRevenue,        // Receita líquida
-    BigDecimal grossProfit,       // Lucro bruto
-    BigDecimal ebitda,
-    BigDecimal ebit,
-    BigDecimal netIncome,         // Lucro líquido
-    BigDecimal operatingCashFlow, // FCO — fluxo de caixa operacional
-    BigDecimal freeCashFlow,      // FCL — fluxo de caixa livre
-    BigDecimal totalDebt,         // Dívida bruta
-    BigDecimal netDebt,           // Dívida líquida
-    BigDecimal equity,            // Patrimônio líquido
-    BigDecimal totalAssets,       // Ativo total
-    LocalDateTime createdAt
-) {}
-
-public enum StatementPeriod { Q1, Q2, Q3, Q4, ANNUAL }
+```kotlin
+// domain/model/Asset.kt
+data class Asset(
+    val id: UUID,
+    val code: String,          // ex: "ITUB4"
+    val name: String,          // ex: "Itaú Unibanco"
+    val sector: String?,       // ex: "Financeiro"
+    val createdAt: LocalDateTime
+)
 ```
 
-### 4.2 FinancialIndicators (view object)
+### 4.2 FinancialStatement
 
-```java
-// application/analysis/FinancialIndicators.java
-public record FinancialIndicators(
+```kotlin
+// domain/model/FinancialStatement.kt
+data class FinancialStatement(
+    val id: UUID,
+    val assetId: UUID,
+    val year: Int,
+    val period: StatementPeriod,       // Q1, Q2, Q3, Q4, ANNUAL
+    val netRevenue: BigDecimal,        // Receita líquida
+    val grossProfit: BigDecimal,       // Lucro bruto
+    val ebitda: BigDecimal,
+    val ebit: BigDecimal,
+    val netIncome: BigDecimal,         // Lucro líquido
+    val operatingCashFlow: BigDecimal, // FCO — fluxo de caixa operacional
+    val freeCashFlow: BigDecimal,      // FCL — fluxo de caixa livre
+    val totalDebt: BigDecimal,         // Dívida bruta
+    val netDebt: BigDecimal,           // Dívida líquida
+    val equity: BigDecimal,            // Patrimônio líquido
+    val totalAssets: BigDecimal,       // Ativo total
+    val createdAt: LocalDateTime
+)
+
+enum class StatementPeriod { Q1, Q2, Q3, Q4, ANNUAL }
+```
+
+### 4.3 FinancialIndicators
+
+```kotlin
+// application/analysis/FinancialIndicators.kt
+data class FinancialIndicators(
     // Margens
-    BigDecimal grossMargin,       // Lucro bruto / Receita
-    BigDecimal ebitdaMargin,
-    BigDecimal netMargin,
-    BigDecimal fcfMargin,         // FCL / Receita
+    val grossMargin: BigDecimal,       // Lucro bruto / Receita
+    val ebitdaMargin: BigDecimal,
+    val netMargin: BigDecimal,
+    val fcfMargin: BigDecimal,         // FCL / Receita
 
     // Rentabilidade
-    BigDecimal roe,               // Lucro líquido / Patrimônio
-    BigDecimal roic,              // EBIT*(1-t) / Capital investido
-    BigDecimal roa,               // Lucro líquido / Ativo total
+    val roe: BigDecimal,               // Lucro líquido / Patrimônio
+    val roic: BigDecimal,              // EBIT*(1-t) / Capital investido
+    val roa: BigDecimal,               // Lucro líquido / Ativo total
 
     // Endividamento
-    BigDecimal debtToEbitda,      // Dívida líquida / EBITDA
-    BigDecimal debtToEquity,
+    val debtToEbitda: BigDecimal,      // Dívida líquida / EBITDA
+    val debtToEquity: BigDecimal,
 
     // Crescimento (se histórico disponível)
-    BigDecimal revenueGrowthYoY,
-    BigDecimal netIncomeGrowthYoY,
+    val revenueGrowthYoY: BigDecimal,
+    val netIncomeGrowthYoY: BigDecimal,
 
     // Geração de caixa
-    BigDecimal fcfConversion,     // FCL / Lucro líquido
+    val fcfConversion: BigDecimal,     // FCL / Lucro líquido
 
-    // Valuation (requer preço atual do ativo)
-    BigDecimal grahamPrice,       // √(22,5 × LPA × VPA)
-    BigDecimal dcfFairValue       // projetado com taxa de desconto configurável
-) {}
-```
-
-### 4.3 StockAnalysisResult (view object)
-
-```java
-// application/analysis/StockAnalysisResult.java
-public record StockAnalysisResult(
-    String assetCode,
-    String assetName,
-    List<FinancialStatement> statements,
-    FinancialIndicators indicators,
-    String aiNarrative,           // texto gerado pela IA
-    String aiVerdict,             // COMPRAR / AGUARDAR / EVITAR
-    String aiRiskLevel,           // BAIXO / MÉDIO / ALTO
-    LocalDateTime analyzedAt
-) {}
+    // Valuation
+    val grahamPrice: BigDecimal,       // √(22,5 × LPA × VPA)
+    val dcfFairValue: BigDecimal       // FCL médio × fator perpétuo
+)
 ```
 
 ---
@@ -153,285 +158,291 @@ public record StockAnalysisResult(
 
 ### 5.1 Use Cases
 
-```java
-// application/analysis/FinancialStatementUseCase.java
-public interface FinancialStatementUseCase {
-    FinancialStatement save(FinancialStatement statement);
-    Optional<FinancialStatement> findById(UUID id);
-    List<FinancialStatement> findByAsset(UUID assetId);
-    List<FinancialStatement> findByAssetAndYear(UUID assetId, int year);
-    void delete(UUID id);
+```kotlin
+// application/asset/AssetUseCase.kt
+interface AssetUseCase {
+    fun save(asset: Asset): Asset
+    fun findById(id: UUID): Asset?
+    fun findAll(): List<Asset>
+    fun delete(id: UUID)
 }
 
-// application/analysis/StockAnalysisUseCase.java
-public interface StockAnalysisUseCase {
-    StockAnalysisResult analyze(UUID assetId, AnalysisRequest request);
+// application/analysis/FinancialStatementUseCase.kt
+interface FinancialStatementUseCase {
+    fun save(statement: FinancialStatement): FinancialStatement
+    fun findById(id: UUID): FinancialStatement?
+    fun findByAsset(assetId: UUID): List<FinancialStatement>
+    fun findByAssetAndYear(assetId: UUID, year: Int): List<FinancialStatement>
+    fun delete(id: UUID)
 }
 ```
 
 ### 5.2 AnalysisRequest
 
-```java
-// application/analysis/AnalysisRequest.java
-public record AnalysisRequest(
-    List<UUID> statementIds,   // DREs selecionadas para a análise
-    BigDecimal discountRate,   // taxa de desconto DCF (padrão: 10%)
-    BigDecimal taxRate,        // alíquota IR p/ ROIC (padrão: 34%)
-    int dcfProjectionYears     // anos de projeção DCF (padrão: 5)
-) {}
+```kotlin
+// application/analysis/AnalysisRequest.kt
+data class AnalysisRequest(
+    val statementIds: List<UUID>,   // DREs selecionadas para a análise
+    val discountRate: BigDecimal,   // taxa de desconto DCF (padrão: 10%)
+    val taxRate: BigDecimal,        // alíquota IR p/ ROIC (padrão: 34%)
+    val dcfProjectionYears: Int     // anos de projeção DCF (padrão: 5)
+)
 ```
 
 ### 5.3 IndicatorCalculationEngine
 
 Componente puro (sem dependências externas) responsável pelos cálculos:
 
-```java
-// application/analysis/IndicatorCalculationEngine.java
+```kotlin
+// application/analysis/IndicatorCalculationEngine.kt
 @Component
-public class IndicatorCalculationEngine {
-    public FinancialIndicators calculate(List<FinancialStatement> stmts, AnalysisRequest req) { ... }
+class IndicatorCalculationEngine {
+    fun calculate(stmts: List<FinancialStatement>, req: AnalysisRequest): FinancialIndicators { ... }
 
-    private BigDecimal roe(FinancialStatement s) { ... }
-    private BigDecimal roic(FinancialStatement s, BigDecimal taxRate) { ... }
-    private BigDecimal grahamPrice(BigDecimal eps, BigDecimal bvps) { ... }
-    private BigDecimal dcf(List<BigDecimal> fcfs, BigDecimal rate, int years) { ... }
+    private fun roe(s: FinancialStatement): BigDecimal { ... }
+    private fun roic(s: FinancialStatement, taxRate: BigDecimal): BigDecimal { ... }
+    private fun grahamPrice(eps: BigDecimal, bvps: BigDecimal): BigDecimal { ... }
+    private fun dcf(fcfs: List<BigDecimal>, rate: BigDecimal, years: Int): BigDecimal { ... }
 }
 ```
 
 ---
 
-## 6. Integração com Claude AI
+## 6. Ferramentas MCP
 
-### 6.1 ClaudeAiClient
+Expostas via Spring AI MCP Server com `@Tool`. O modelo no terminal descobre e invoca essas ferramentas automaticamente.
 
-```java
-// infrastructure/integration/ClaudeAiClient.java
+```kotlin
+// infrastructure/mcp/FinancialStatementTools.kt
 @Component
-public class ClaudeAiClient {
-    // POST https://api.anthropic.com/v1/messages
-    public ClaudeAnalysisResponse analyze(ClaudeAnalysisRequest request) { ... }
+class FinancialStatementTools(
+    private val statementUseCase: FinancialStatementUseCase,
+    private val assetUseCase: AssetUseCase,
+    private val engine: IndicatorCalculationEngine
+) {
+    @Tool(description = "Lista todos os ativos cadastrados")
+    fun findAllAssets(): List<Asset> { ... }
+
+    @Tool(description = "Lista todas as DREs de um ativo pelo código (ex: ITUB4)")
+    fun findStatementsByAssetCode(assetCode: String): List<FinancialStatement> { ... }
+
+    @Tool(description = "Lista as DREs de um ativo filtradas por ano")
+    fun findStatementsByAssetCodeAndYear(assetCode: String, year: Int): List<FinancialStatement> { ... }
+
+    @Tool(description = "Calcula indicadores fundamentalistas com base nas DREs de um ativo")
+    fun calculateIndicators(
+        assetCode: String,
+        discountRate: Double = 0.10,
+        taxRate: Double = 0.34,
+        dcfProjectionYears: Int = 5
+    ): FinancialIndicators { ... }
 }
 ```
 
-### 6.2 Prompt enviado à IA
+---
 
-```
-Você é um analista financeiro especializado em ações brasileiras.
+## 7. Interface Web (Thymeleaf)
 
-Analise os dados financeiros abaixo e retorne um JSON com:
-- "narrative": texto explicativo em português (3-5 parágrafos)
-- "verdict": "COMPRAR" | "AGUARDAR" | "EVITAR"
-- "riskLevel": "BAIXO" | "MÉDIO" | "ALTO"
-- "highlights": lista de até 5 pontos positivos e negativos
+### 7.1 Telas
 
-Dados do ativo: {assetCode} — {assetName}
-Período analisado: {periods}
-
-Indicadores calculados:
-{indicatorsJson}
-
-Dados brutos das DREs:
-{statementsJson}
-```
-
-### 6.3 Configuração
-
-```yaml
-# application.yaml
-wealthlix:
-  ai:
-    enabled: true
-    api-key: ${ANTHROPIC_API_KEY}
-    model: claude-sonnet-4-6
-    max-tokens: 2000
-```
-
-Se `ai.enabled=false`, o `StockAnalysisService` retorna indicadores calculados sem narrativa da IA.
+| Rota                                  | Template                        | Descrição                      |
+|---------------------------------------|---------------------------------|--------------------------------|
+| `GET /assets`                         | `assets/list.html`              | Lista de ativos cadastrados    |
+| `GET /assets/new`                     | `assets/form.html`              | Formulário de novo ativo       |
+| `POST /assets`                        | redirect → list                 | Salva ativo                    |
+| `GET /assets/{id}/edit`               | `assets/form.html`              | Edição de ativo                |
+| `POST /assets/{id}`                   | redirect → list                 | Atualiza ativo                 |
+| `DELETE /assets/{id}`                 | redirect → list                 | Remove ativo                   |
+| `GET /assets/{id}/statements`         | `statements/list.html`          | Lista de DREs do ativo         |
+| `GET /assets/{id}/statements/new`     | `statements/form.html`          | Formulário de nova DRE         |
+| `POST /assets/{id}/statements`        | redirect → list                 | Salva DRE                      |
+| `GET /assets/{id}/statements/{sid}`   | `statements/form.html`          | Edição de DRE                  |
+| `POST /assets/{id}/statements/{sid}`  | redirect → list                 | Atualiza DRE                   |
+| `DELETE /assets/{id}/statements/{sid}`| redirect → list                 | Remove DRE                     |
 
 ---
 
-## 7. Camada de Infraestrutura
+## 8. Camada de Infraestrutura
 
-### 7.1 Estrutura de arquivos
+### 8.1 Estrutura de arquivos
 
 ```
 domain/
   model/
-    FinancialStatement.java
+    Asset.kt
+    FinancialStatement.kt
   repository/
-    FinancialStatementRepository.java    ← interface (porta)
+    AssetRepository.kt                 ← interface (porta)
+    FinancialStatementRepository.kt    ← interface (porta)
 
 application/
+  asset/
+    AssetUseCase.kt
+    AssetService.kt
   analysis/
-    FinancialStatementUseCase.java
-    FinancialStatementService.java
-    StockAnalysisUseCase.java
-    StockAnalysisService.java
-    IndicatorCalculationEngine.java
-    FinancialIndicators.java
-    StockAnalysisResult.java
-    AnalysisRequest.java
+    FinancialStatementUseCase.kt
+    FinancialStatementService.kt
+    IndicatorCalculationEngine.kt
+    FinancialIndicators.kt
+    AnalysisRequest.kt
 
 infrastructure/
   web/
-    FinancialStatementController.java    ← CRUD de DREs
-    StockAnalysisController.java         ← solicita e exibe análise
+    AssetController.kt
+    FinancialStatementController.kt
     form/
-      FinancialStatementForm.java
-      AnalysisRequestForm.java
+      AssetForm.kt
+      FinancialStatementForm.kt
+  mcp/
+    FinancialStatementTools.kt         ← ferramentas MCP (@Tool)
   persistence/
     jpa/entity/
-      FinancialStatementJpaEntity.java
+      AssetJpaEntity.kt
+      FinancialStatementJpaEntity.kt
     jpa/repository/
-      SpringDataFinancialStatementRepository.java
+      SpringDataAssetRepository.kt
+      SpringDataFinancialStatementRepository.kt
     adapter/
-      FinancialStatementRepositoryAdapter.java
+      AssetRepositoryAdapter.kt
+      FinancialStatementRepositoryAdapter.kt
     mapper/
-      FinancialStatementMapper.java
-  integration/
-    ClaudeAiClient.java
-    ClaudeAnalysisRequest.java
-    ClaudeAnalysisResponse.java
+      AssetMapper.kt
+      FinancialStatementMapper.kt
 ```
 
-### 7.2 Entidade JPA
+### 8.2 Schema SQL
 
 ```sql
+CREATE TABLE assets (
+  id          UUID          NOT NULL PRIMARY KEY,
+  code        VARCHAR(10)   NOT NULL UNIQUE,   -- ex: ITUB4
+  name        VARCHAR(100)  NOT NULL,
+  sector      VARCHAR(100),
+  created_at  TIMESTAMP     NOT NULL
+);
+
 CREATE TABLE financial_statements (
-  id              CHAR(36)       NOT NULL PRIMARY KEY,
-  asset_id        CHAR(36)       NOT NULL,
-  year            INT            NOT NULL,
+  id              UUID           NOT NULL PRIMARY KEY,
+  asset_id        UUID           NOT NULL REFERENCES assets(id),
+  year            INTEGER        NOT NULL,
   period          VARCHAR(10)    NOT NULL,   -- Q1/Q2/Q3/Q4/ANNUAL
-  net_revenue     DECIMAL(18,2),
-  gross_profit    DECIMAL(18,2),
-  ebitda          DECIMAL(18,2),
-  ebit            DECIMAL(18,2),
-  net_income      DECIMAL(18,2),
-  op_cash_flow    DECIMAL(18,2),
-  free_cash_flow  DECIMAL(18,2),
-  total_debt      DECIMAL(18,2),
-  net_debt        DECIMAL(18,2),
-  equity          DECIMAL(18,2),
-  total_assets    DECIMAL(18,2),
-  created_at      DATETIME       NOT NULL,
-  UNIQUE KEY uq_asset_period (asset_id, year, period)
+  net_revenue     NUMERIC(18,2),
+  gross_profit    NUMERIC(18,2),
+  ebitda          NUMERIC(18,2),
+  ebit            NUMERIC(18,2),
+  net_income      NUMERIC(18,2),
+  op_cash_flow    NUMERIC(18,2),
+  free_cash_flow  NUMERIC(18,2),
+  total_debt      NUMERIC(18,2),
+  net_debt        NUMERIC(18,2),
+  equity          NUMERIC(18,2),
+  total_assets    NUMERIC(18,2),
+  created_at      TIMESTAMP      NOT NULL,
+  CONSTRAINT uq_asset_period UNIQUE (asset_id, year, period)
 );
 ```
 
----
+### 8.3 Dependência Spring AI MCP Server
 
-## 8. Interface Web (Thymeleaf)
-
-### 8.1 Telas
-
-| Rota                                  | Template                              | Descrição                        |
-|---------------------------------------|---------------------------------------|----------------------------------|
-| `GET /assets/{id}/statements`         | `statements/list.html`                | Lista de DREs do ativo           |
-| `GET /assets/{id}/statements/new`     | `statements/form.html`                | Formulário de nova DRE           |
-| `POST /assets/{id}/statements`        | redirect → list                       | Salva DRE                        |
-| `GET /assets/{id}/statements/{sid}`   | `statements/form.html`                | Edição de DRE                    |
-| `POST /assets/{id}/statements/{sid}`  | redirect → list                       | Atualiza DRE                     |
-| `DELETE /assets/{id}/statements/{sid}`| redirect → list                       | Remove DRE                       |
-| `GET /assets/{id}/analysis`           | `statements/analysis-setup.html`      | Seleciona DREs + parâmetros DCF  |
-| `POST /assets/{id}/analysis`          | `statements/analysis-result.html`     | Exibe resultado da análise       |
-
-### 8.2 Layout da tela de resultado da análise
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ITUB4 — Itaú Unibanco  │  Veredicto: COMPRAR  │ Risco: BAIXO │
-├──────────────┬──────────────────────────────────────────────┤
-│ MARGENS      │  RENTABILIDADE  │ ENDIVIDAMENTO  │ VALUATION   │
-│ Net: 27%     │  ROE: 18%       │ Dív/EBITDA: 2x │ Graham: R$32│
-│ EBITDA: 42%  │  ROIC: 15%      │ Dív/PL: 0,8x   │ DCF: R$38   │
-│ FCF: 22%     │  ROA: 5%        │                 │             │
-├──────────────┴──────────────────────────────────────────────┤
-│ ANÁLISE DA IA                                               │
-│ "Itaú demonstra sólida geração de caixa com crescimento    │
-│  consistente de receita nos últimos 4 trimestres..."       │
-│                                                             │
-│ ✅ FCL cobre 1,8x os dividendos pagos                       │
-│ ✅ Margem líquida acima da média do setor                   │
-│ ⚠️  Dívida líquida cresceu 12% no último trimestre          │
-└─────────────────────────────────────────────────────────────┘
+```groovy
+// build.gradle
+dependencies {
+    implementation 'org.springframework.ai:spring-ai-mcp-server-webmvc-spring-boot-starter'
+}
 ```
 
 ---
 
-## 9. Testes
+## 9. Configuração do MCP no Claude Code
 
-| Camada                    | Estratégia                                                          |
-|---------------------------|---------------------------------------------------------------------|
-| `IndicatorCalculationEngine` | Testes unitários com valores conhecidos e assertivas exatas      |
-| `StockAnalysisService`    | Testes unitários com mock do `ClaudeAiClient`                       |
-| `FinancialStatementService` | Testes unitários com mock do repositório                          |
-| Controllers               | `@WebMvcTest` com mock dos use cases                                |
-| Repositórios              | `@DataJpaTest` com H2 (perfil test)                                 |
-| End-to-end                | Manual via browser após subir a aplicação                           |
+Após subir a aplicação (`./gradlew bootRun`), registrar o servidor MCP:
 
----
+```json
+// .claude/settings.json
+{
+  "mcpServers": {
+    "stock-analyzer": {
+      "type": "sse",
+      "url": "http://localhost:8080/sse"
+    }
+  }
+}
+```
 
-## 10. Decisões Técnicas
-
-| Decisão                              | Escolha                          | Motivo                                                         |
-|--------------------------------------|----------------------------------|----------------------------------------------------------------|
-| Modelo de IA                         | `claude-sonnet-4-6`              | Melhor custo-benefício para análise estruturada de dados       |
-| Cálculo de indicadores               | Java puro (sem lib financeira)   | Fórmulas simples e transparentes; facilita auditoria           |
-| Persistência de análise da IA        | Não persiste (v1)                | Resultado é determinístico dado os dados; regenerar é barato   |
-| Prompt format                        | JSON estruturado no retorno      | Facilita parsing e exibição separada de narrativa e veredicto  |
-| DCF simplificado                     | FCL médio × fator perpétuo       | Evita projeções complexas; usuário pode ajustar a taxa         |
-| ai.enabled flag                      | Sim                              | Permite usar a feature sem chave da API (só indicadores)       |
+Para verificar as ferramentas disponíveis no terminal: `/mcp`
 
 ---
 
-## 11. Tarefas de Implementação
+## 10. Testes
+
+| Camada                       | Estratégia                                                     |
+|------------------------------|----------------------------------------------------------------|
+| `IndicatorCalculationEngine` | Testes unitários com valores conhecidos e assertivas exatas    |
+| `FinancialStatementService`  | Testes unitários com mock do repositório                       |
+| `AssetService`               | Testes unitários com mock do repositório                       |
+| `FinancialStatementTools`    | Testes unitários com mock dos use cases                        |
+| Controllers                  | `@WebMvcTest` com mock dos use cases                           |
+| Repositórios                 | `@DataJpaTest` com H2 (perfil test)                            |
+| End-to-end                   | Manual: cadastrar via web, analisar via terminal               |
+
+---
+
+## 11. Decisões Técnicas
+
+| Decisão                        | Escolha                            | Motivo                                                              |
+|--------------------------------|------------------------------------|---------------------------------------------------------------------|
+| Cadastro de dados              | Interface web (Thymeleaf)          | Formulário é mais ergonômico para entrada manual de DREs            |
+| Integração com IA              | MCP (servidor)                     | Análise acontece no terminal; app é storage + cálculos              |
+| Transporte MCP                 | HTTP/SSE                           | Natural para Spring Boot WebMVC; não exige modo stdio               |
+| Cálculo de indicadores         | Kotlin puro (sem lib financeira)   | Fórmulas simples e transparentes; facilita auditoria                |
+| Persistência de análises da IA | Não persiste                       | Análise é gerada pelo modelo no terminal; regenerar é barato        |
+| DCF simplificado               | FCL médio × fator perpétuo         | Evita projeções complexas; usuário pode ajustar a taxa via terminal |
+
+---
+
+## 12. Tarefas de Implementação
 
 ### Fase 1 — Domínio e Persistência
 
-- [ ] **T1** — Criar `FinancialStatement` (record de domínio) e enum `StatementPeriod`
-- [ ] **T2** — Criar interface `FinancialStatementRepository` (domínio)
-- [ ] **T3** — Criar `FinancialStatementJpaEntity` com anotações JPA
-- [ ] **T4** — Criar `FinancialStatementMapper` (domain ↔ JPA entity)
-- [ ] **T5** — Criar `SpringDataFinancialStatementRepository` e `FinancialStatementRepositoryAdapter`
-- [ ] **T6** — Criar migration SQL / garantir que Hibernate cria a tabela no boot
+- [ ] **T1** — Criar `Asset` e `FinancialStatement` (data classes de domínio) e enum `StatementPeriod`
+- [ ] **T2** — Criar interfaces `AssetRepository` e `FinancialStatementRepository` (domínio)
+- [ ] **T3** — Criar `AssetJpaEntity` e `FinancialStatementJpaEntity` com anotações JPA
+- [ ] **T4** — Criar mappers (domain ↔ JPA entity)
+- [ ] **T5** — Criar repositórios Spring Data e adapters
+- [ ] **T6** — Criar migration SQL (tabelas `assets` e `financial_statements`)
 
 ### Fase 2 — Aplicação (Cálculos)
 
-- [ ] **T7** — Criar `FinancialIndicators` e `StockAnalysisResult` (view objects)
-- [ ] **T8** — Criar `AnalysisRequest` (parâmetros de entrada da análise)
-- [ ] **T9** — Implementar `IndicatorCalculationEngine` com todos os indicadores
-- [ ] **T10** — Escrever testes unitários de `IndicatorCalculationEngine` com dados reais de balanço
-- [ ] **T11** — Criar `FinancialStatementUseCase` e `FinancialStatementService`
-- [ ] **T12** — Criar `StockAnalysisUseCase` e `StockAnalysisService` (sem IA ainda)
+- [ ] **T7** — Criar `FinancialIndicators` e `AnalysisRequest`
+- [ ] **T8** — Implementar `IndicatorCalculationEngine` com todos os indicadores
+- [ ] **T9** — Escrever testes unitários de `IndicatorCalculationEngine` com dados reais de balanço
+- [ ] **T10** — Criar `AssetUseCase` / `AssetService` e `FinancialStatementUseCase` / `FinancialStatementService`
 
-### Fase 3 — Integração com Claude AI
+### Fase 3 — Interface Web
 
-- [ ] **T13** — Adicionar `ANTHROPIC_API_KEY` no `application.yaml` e `.env`
-- [ ] **T14** — Implementar `ClaudeAiClient` com chamada HTTP à API Anthropic
-- [ ] **T15** — Definir e refinar o prompt de análise
-- [ ] **T16** — Integrar `ClaudeAiClient` no `StockAnalysisService`
-- [ ] **T17** — Escrever teste unitário de `StockAnalysisService` com mock do `ClaudeAiClient`
+- [ ] **T11** — Criar `AssetForm`, `AssetController` e templates (`assets/list.html`, `assets/form.html`)
+- [ ] **T12** — Criar `FinancialStatementForm`, `FinancialStatementController` e templates (`statements/list.html`, `statements/form.html`)
 
-### Fase 4 — Interface Web
+### Fase 4 — Ferramentas MCP
 
-- [ ] **T18** — Criar `FinancialStatementForm`, `FinancialStatementController` e templates de CRUD (`list.html`, `form.html`)
-- [ ] **T19** — Criar `AnalysisRequestForm`, `StockAnalysisController` e template `analysis-setup.html`
-- [ ] **T20** — Criar template `analysis-result.html` com cards de indicadores e bloco narrativo da IA
-- [ ] **T21** — Adicionar link "DREs / Analisar" na tela de detalhe do ativo
+- [ ] **T13** — Adicionar dependência `spring-ai-mcp-server-webmvc-spring-boot-starter` no `build.gradle`
+- [ ] **T14** — Implementar `FinancialStatementTools` com todas as ferramentas `@Tool`
+- [ ] **T15** — Registrar o servidor MCP no `.claude/settings.json`
+- [ ] **T16** — Escrever testes unitários de `FinancialStatementTools` com mocks
 
 ### Fase 5 — Testes e Ajustes
 
-- [ ] **T22** — Testes de integração dos controllers (`@WebMvcTest`)
-- [ ] **T23** — Teste `@DataJpaTest` do repositório
-- [ ] **T24** — Validação manual com DRE real de um ativo da carteira
-- [ ] **T25** — Ajustar prompt com base no resultado real da IA
+- [ ] **T17** — `@WebMvcTest` dos controllers
+- [ ] **T18** — `@DataJpaTest` dos repositórios
+- [ ] **T19** — Validação manual: cadastrar via web, analisar via terminal com DRE real
+- [ ] **T20** — Refinar descrições das ferramentas `@Tool` com base no uso real
 
 ---
 
-## 12. Referências
+## 13. Referências
 
-- [Anthropic API — Messages](https://docs.anthropic.com/en/api/messages)
-- `docs/architecture.md` — camadas e padrões do Wealthlix
-- `docs/business-rules.md` — regras dos módulos existentes
+- [Spring AI MCP Server](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-server-boot-starter-docs.html)
+- [Model Context Protocol](https://modelcontextprotocol.io)
+- `docs/architecture.md` — camadas e padrões do Stock Analyzer
 - Fórmula Graham: `√(22,5 × LPA × VPA)`
 - Fórmula ROIC: `EBIT × (1 − t) / (Dívida líquida + PL)`
