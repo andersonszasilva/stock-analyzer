@@ -1,6 +1,7 @@
 package br.com.stockanalyzer.infrastructure.persistence.jpa.entity
 
 import jakarta.persistence.*
+import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -23,5 +24,11 @@ class AssetJpaEntity(
     val createdAt: LocalDateTime,
 
     @Column(name = "shares_outstanding")
-    val sharesOutstanding: Long? = null
+    val sharesOutstanding: Long? = null,
+
+    @Column(name = "recommended_price", precision = 12, scale = 2)
+    val recommendedPrice: BigDecimal? = null,
+
+    @Column(name = "last_calculated_at")
+    val lastCalculatedAt: LocalDateTime? = null
 )

@@ -29,5 +29,6 @@ data class FinancialIndicators(
     val grahamPrice: BigDecimal,
     val dcfFairValue: BigDecimal,
     val eps: BigDecimal? = null,
-    val bvps: BigDecimal? = null
+    val bvps: BigDecimal? = null,
+    val recommendedPrice: BigDecimal? = null
 )

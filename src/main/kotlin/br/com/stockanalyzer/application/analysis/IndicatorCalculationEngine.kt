@@ -41,6 +41,21 @@ class IndicatorCalculationEngine {
             Triple(null as BigDecimal?, null as BigDecimal?, dcf(avgFcf, req.discountRate, req.dcfProjectionYears))
         }
 
+        val grahamPriceVal = if (eps != null && bvps != null) grahamPrice(eps, bvps) else zero
+
+        val recommendedPrice: BigDecimal? = when {
+            grahamPriceVal > zero && dcfVal > zero ->
+                grahamPriceVal.add(dcfVal)
+                    .divide(BigDecimal(2), 2, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal("0.70"))
+                    .setScale(2, RoundingMode.HALF_UP)
+            grahamPriceVal > zero ->
+                grahamPriceVal.multiply(BigDecimal("0.70")).setScale(2, RoundingMode.HALF_UP)
+            dcfVal > zero ->
+                dcfVal.multiply(BigDecimal("0.70")).setScale(2, RoundingMode.HALF_UP)
+            else -> null
+        }
+
         return FinancialIndicators(
             grossMargin = margin(latest.grossProfit, latest.netRevenue),
             ebitdaMargin = margin(latest.ebitda, latest.netRevenue),
@@ -54,10 +69,11 @@ class IndicatorCalculationEngine {
             revenueGrowthYoY = revenueGrowth,
             netIncomeGrowthYoY = netIncomeGrowth,
             fcfConversion = fcfConversion(latest),
-            grahamPrice = if (eps != null && bvps != null) grahamPrice(eps, bvps) else zero,
+            grahamPrice = grahamPriceVal,
             dcfFairValue = dcfVal,
             eps = eps,
-            bvps = bvps
+            bvps = bvps,
+            recommendedPrice = recommendedPrice
         )
     }
 

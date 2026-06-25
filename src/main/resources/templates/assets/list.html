@@ -24,6 +24,8 @@
             <th>Nome</th>
             <th>Setor</th>
             <th class="text-end">Qtd. ações</th>
+            <th class="text-end">Preço recom.</th>
+            <th class="text-end">Último cálculo</th>
             <th class="text-end">Ações</th>
         </tr>
         </thead>
@@ -33,6 +35,10 @@
             <td th:text="${asset.name}"></td>
             <td th:text="${asset.sector ?: '—'}"></td>
             <td class="text-end" th:text="${asset.sharesOutstanding != null} ? ${#numbers.formatInteger(asset.sharesOutstanding, 1, 'POINT')} : '—'"></td>
+            <td class="text-end fw-bold text-success"
+                th:text="${asset.recommendedPrice != null} ? 'R$ ' + ${#numbers.formatDecimal(asset.recommendedPrice, 1, 'POINT', 2, 'COMMA')} : '—'"></td>
+            <td class="text-end text-muted small"
+                th:text="${asset.lastCalculatedAt != null} ? ${#temporals.format(asset.lastCalculatedAt, 'dd/MM/yyyy HH:mm')} : '—'"></td>
             <td class="text-end">
                 <a th:href="@{/assets/{id}/statements(id=${asset.id})}" class="btn btn-sm btn-outline-secondary">DREs</a>
                 <a th:href="@{/assets/{id}/edit(id=${asset.id})}" class="btn btn-sm btn-outline-primary">Editar</a>

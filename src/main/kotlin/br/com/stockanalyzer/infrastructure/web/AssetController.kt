@@ -41,7 +41,13 @@ class AssetController(private val assetUseCase: AssetUseCase) {
     @GetMapping("/{id}/edit")
     fun editForm(@PathVariable id: UUID, model: Model): String {
         val asset = assetUseCase.findById(id) ?: return "redirect:/assets"
-        model.addAttribute("form", AssetForm(code = asset.code, name = asset.name, sector = asset.sector, sharesOutstanding = asset.sharesOutstanding))
+        model.addAttribute("form", AssetForm(
+            code = asset.code,
+            name = asset.name,
+            sector = asset.sector,
+            sharesOutstanding = asset.sharesOutstanding,
+            recommendedPrice = asset.recommendedPrice
+        ))
         model.addAttribute("assetId", id)
         return "assets/form"
     }
@@ -57,7 +63,8 @@ class AssetController(private val assetUseCase: AssetUseCase) {
             model.addAttribute("assetId", id)
             return "assets/form"
         }
-        assetUseCase.save(form.toAsset(id))
+        val existing = assetUseCase.findById(id)
+        assetUseCase.save(form.toAsset(id, existing))
         return "redirect:/assets"
     }
 
@@ -67,12 +74,14 @@ class AssetController(private val assetUseCase: AssetUseCase) {
         return "redirect:/assets"
     }
 
-    private fun AssetForm.toAsset(id: UUID = UUID.randomUUID()) = Asset(
+    private fun AssetForm.toAsset(id: UUID = UUID.randomUUID(), existing: Asset? = null) = Asset(
         id = id,
         code = code.trim().uppercase(),
         name = name.trim(),
         sector = sector?.trim()?.ifBlank { null },
-        createdAt = LocalDateTime.now(),
-        sharesOutstanding = sharesOutstanding
+        createdAt = existing?.createdAt ?: LocalDateTime.now(),
+        sharesOutstanding = sharesOutstanding,
+        recommendedPrice = recommendedPrice,
+        lastCalculatedAt = existing?.lastCalculatedAt
     )
 }

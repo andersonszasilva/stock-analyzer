@@ -2,6 +2,7 @@ package br.com.stockanalyzer.infrastructure.web.form
 
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import java.math.BigDecimal
 
 data class AssetForm(
     @field:NotBlank
@@ -15,5 +16,7 @@ data class AssetForm(
     @field:Size(max = 100)
     val sector: String? = null,
 
-    val sharesOutstanding: Long? = null
+    val sharesOutstanding: Long? = null,
+
+    val recommendedPrice: BigDecimal? = null
 )

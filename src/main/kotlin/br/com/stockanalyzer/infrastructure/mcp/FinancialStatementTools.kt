@@ -123,6 +123,13 @@ class FinancialStatementTools(
             dcfProjectionYears = dcfProjectionYears,
             sharesOutstanding = asset.sharesOutstanding
         )
-        return engine.calculate(statements, request)
+        val indicators = engine.calculate(statements, request)
+
+        assetUseCase.save(asset.copy(
+            recommendedPrice = indicators.recommendedPrice,
+            lastCalculatedAt = LocalDateTime.now()
+        ))
+
+        return indicators
     }
 }

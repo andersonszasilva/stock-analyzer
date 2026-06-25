@@ -1,5 +1,6 @@
 package br.com.stockanalyzer.domain.model
 
+import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -9,5 +10,7 @@ data class Asset(
     val name: String,
     val sector: String?,
     val createdAt: LocalDateTime,
-    val sharesOutstanding: Long? = null
+    val sharesOutstanding: Long? = null,
+    val recommendedPrice: BigDecimal? = null,
+    val lastCalculatedAt: LocalDateTime? = null
 )

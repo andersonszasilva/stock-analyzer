@@ -38,6 +38,12 @@
             <div class="form-text">Quantidade total de ações emitidas (ex: 12888700000)</div>
         </div>
 
+        <div class="mb-3">
+            <label for="recommendedPrice" class="form-label">Preço recomendado (R$)</label>
+            <input type="number" id="recommendedPrice" th:field="*{recommendedPrice}" class="form-control" step="0.01" min="0">
+            <div class="form-text">Preenchido automaticamente pelo cálculo de indicadores (30% de margem de segurança). Pode ser ajustado manualmente.</div>
+        </div>
+
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary">Salvar</button>
             <a th:href="@{/assets}" class="btn btn-outline-secondary">Cancelar</a>
