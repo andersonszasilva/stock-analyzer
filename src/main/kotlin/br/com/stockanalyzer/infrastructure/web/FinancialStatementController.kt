@@ -3,6 +3,7 @@ package br.com.stockanalyzer.infrastructure.web
 import br.com.stockanalyzer.application.analysis.FinancialStatementUseCase
 import br.com.stockanalyzer.application.asset.AssetUseCase
 import br.com.stockanalyzer.domain.model.FinancialStatement
+import br.com.stockanalyzer.domain.model.MonetaryUnit
 import br.com.stockanalyzer.domain.model.StatementPeriod
 import br.com.stockanalyzer.infrastructure.web.form.FinancialStatementForm
 import jakarta.validation.Valid
@@ -35,6 +36,7 @@ class FinancialStatementController(
         model.addAttribute("form", FinancialStatementForm())
         model.addAttribute("statementId", null)
         model.addAttribute("periods", StatementPeriod.entries)
+        model.addAttribute("monetaryUnits", MonetaryUnit.entries)
         return "statements/form"
     }
 
@@ -49,6 +51,7 @@ class FinancialStatementController(
             model.addAttribute("asset", assetUseCase.findById(assetId))
             model.addAttribute("statementId", null)
             model.addAttribute("periods", StatementPeriod.entries)
+            model.addAttribute("monetaryUnits", MonetaryUnit.entries)
             return "statements/form"
         }
         statementUseCase.save(form.toStatement(assetId))
@@ -63,6 +66,7 @@ class FinancialStatementController(
         model.addAttribute("form", stmt.toForm())
         model.addAttribute("statementId", statementId)
         model.addAttribute("periods", StatementPeriod.entries)
+        model.addAttribute("monetaryUnits", MonetaryUnit.entries)
         return "statements/form"
     }
 
@@ -78,6 +82,7 @@ class FinancialStatementController(
             model.addAttribute("asset", assetUseCase.findById(assetId))
             model.addAttribute("statementId", statementId)
             model.addAttribute("periods", StatementPeriod.entries)
+            model.addAttribute("monetaryUnits", MonetaryUnit.entries)
             return "statements/form"
         }
         statementUseCase.save(form.toStatement(assetId, statementId))
@@ -96,6 +101,7 @@ class FinancialStatementController(
             assetId = assetId,
             year = year!!,
             period = period!!,
+            monetaryUnit = monetaryUnit,
             netRevenue = netRevenue,
             grossProfit = grossProfit,
             ebitda = ebitda,
@@ -113,6 +119,7 @@ class FinancialStatementController(
     private fun FinancialStatement.toForm() = FinancialStatementForm(
         year = year,
         period = period,
+        monetaryUnit = monetaryUnit,
         netRevenue = netRevenue,
         grossProfit = grossProfit,
         ebitda = ebitda,

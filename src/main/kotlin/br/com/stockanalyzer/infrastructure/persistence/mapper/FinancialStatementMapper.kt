@@ -1,6 +1,7 @@
 package br.com.stockanalyzer.infrastructure.persistence.mapper
 
 import br.com.stockanalyzer.domain.model.FinancialStatement
+import br.com.stockanalyzer.domain.model.MonetaryUnit
 import br.com.stockanalyzer.domain.model.StatementPeriod
 import br.com.stockanalyzer.infrastructure.persistence.jpa.entity.FinancialStatementJpaEntity
 import org.springframework.stereotype.Component
@@ -12,6 +13,7 @@ class FinancialStatementMapper {
         assetId = entity.assetId,
         year = entity.year,
         period = StatementPeriod.valueOf(entity.period),
+        monetaryUnit = MonetaryUnit.valueOf(entity.monetaryUnit),
         netRevenue = entity.netRevenue,
         grossProfit = entity.grossProfit,
         ebitda = entity.ebitda,
@@ -31,6 +33,7 @@ class FinancialStatementMapper {
         assetId = domain.assetId,
         year = domain.year,
         period = domain.period.name,
+        monetaryUnit = domain.monetaryUnit.name,
         netRevenue = domain.netRevenue,
         grossProfit = domain.grossProfit,
         ebitda = domain.ebitda,

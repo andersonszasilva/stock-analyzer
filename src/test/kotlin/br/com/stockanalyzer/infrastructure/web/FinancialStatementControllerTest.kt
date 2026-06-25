@@ -4,6 +4,7 @@ import br.com.stockanalyzer.application.analysis.FinancialStatementUseCase
 import br.com.stockanalyzer.application.asset.AssetUseCase
 import br.com.stockanalyzer.domain.model.Asset
 import br.com.stockanalyzer.domain.model.FinancialStatement
+import br.com.stockanalyzer.domain.model.MonetaryUnit
 import br.com.stockanalyzer.domain.model.StatementPeriod
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.*
@@ -41,6 +42,7 @@ class FinancialStatementControllerTest {
         assetId = assetId,
         year = 2024,
         period = StatementPeriod.ANNUAL,
+        monetaryUnit = MonetaryUnit.MILLIONS,
         netRevenue = BigDecimal("100000"),
         grossProfit = BigDecimal("40000"),
         ebitda = BigDecimal("25000"),

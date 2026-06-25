@@ -1,5 +1,6 @@
 package br.com.stockanalyzer.infrastructure.web.form
 
+import br.com.stockanalyzer.domain.model.MonetaryUnit
 import br.com.stockanalyzer.domain.model.StatementPeriod
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -13,6 +14,8 @@ data class FinancialStatementForm(
 
     @field:NotNull
     val period: StatementPeriod? = null,
+
+    val monetaryUnit: MonetaryUnit = MonetaryUnit.MILLIONS,
 
     val netRevenue: BigDecimal = BigDecimal.ZERO,
     val grossProfit: BigDecimal = BigDecimal.ZERO,

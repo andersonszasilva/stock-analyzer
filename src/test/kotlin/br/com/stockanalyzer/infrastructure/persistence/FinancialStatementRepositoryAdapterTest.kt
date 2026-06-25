@@ -39,6 +39,7 @@ class FinancialStatementRepositoryAdapterTest {
         assetId = assetId,
         year = year,
         period = period,
+        monetaryUnit = "MILLIONS",
         netRevenue = BigDecimal("100000"),
         grossProfit = BigDecimal("40000"),
         ebitda = BigDecimal("25000"),

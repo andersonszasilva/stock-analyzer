@@ -38,6 +38,10 @@ out/
 
 ### Claude Code ###
 .claude/settings.local.json
+.claude/settings.json
 
 ### Kotlin ###
 .kotlin
+
+### Docs ###
+*.pdf

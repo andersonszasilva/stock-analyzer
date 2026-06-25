@@ -9,6 +9,7 @@ data class FinancialStatement(
     val assetId: UUID,
     val year: Int,
     val period: StatementPeriod,
+    val monetaryUnit: MonetaryUnit = MonetaryUnit.MILLIONS,
     val netRevenue: BigDecimal,
     val grossProfit: BigDecimal,
     val ebitda: BigDecimal,

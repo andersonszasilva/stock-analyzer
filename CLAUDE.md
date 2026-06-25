@@ -9,12 +9,12 @@ Aplicação híbrida: interface web para cadastro de ativos e DREs + servidor MC
 - **Build:** Gradle (Groovy DSL)
 - **Banco:** PostgreSQL
 - **Template engine:** Thymeleaf + Bootstrap (cadastro de dados)
-- **MCP:** Spring AI MCP Server (transporte HTTP/SSE)
+- **MCP:** Spring AI MCP Server (transporte Streamable HTTP)
 
 ## Comandos
 
 ```bash
-./gradlew bootRun          # sobe a aplicação (web em :8080, MCP em :8080/sse)
+./gradlew bootRun          # sobe a aplicação (web em :4000, MCP em :4000/mcp)
 ./gradlew test             # roda todos os testes
 ./gradlew build            # compila e testa
 ./gradlew bootJar          # gera o JAR executável
@@ -64,18 +64,20 @@ Nunca vaze entidades JPA (`*JpaEntity`) para fora de `infrastructure/persistence
 
 ## Configuração do MCP no Claude Code
 
-Registrar em `.claude/settings.json` após subir a aplicação:
+Após subir a aplicação, registrar via CLI (armazena em `~/.claude.json`):
 
-```json
-{
-  "mcpServers": {
-    "stock-analyzer": {
-      "type": "http",
-      "url": "http://localhost:4000/mcp"
-    }
-  }
-}
+```bash
+claude mcp add --transport http --scope local stock-analyzer http://localhost:4000/mcp
 ```
+
+Verificar conexão:
+
+```bash
+claude mcp list
+# stock-analyzer: http://localhost:4000/mcp (HTTP) - ✔ Connected
+```
+
+> **Nota:** o `settings.json` do projeto (`.claude/settings.json`) **não** registra servidores MCP — use `claude mcp add`. O escopo `local` vincula o servidor ao projeto atual.
 
 Para verificar as ferramentas disponíveis no terminal: `/mcp`
 

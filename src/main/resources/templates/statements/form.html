@@ -32,6 +32,12 @@
                 </select>
                 <div class="invalid-feedback" th:errors="*{period}"></div>
             </div>
+            <div class="col-sm-4">
+                <label for="monetaryUnit" class="form-label">Unidade monetária <span class="text-danger">*</span></label>
+                <select id="monetaryUnit" th:field="*{monetaryUnit}" class="form-select">
+                    <option th:each="u : ${monetaryUnits}" th:value="${u}" th:text="${u}"></option>
+                </select>
+            </div>
         </div>
 
         <h6 class="mt-4 mb-2 text-muted">Resultado</h6>

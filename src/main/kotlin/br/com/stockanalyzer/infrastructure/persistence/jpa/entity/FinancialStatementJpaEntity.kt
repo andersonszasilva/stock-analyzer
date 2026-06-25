@@ -23,6 +23,9 @@ class FinancialStatementJpaEntity(
     @Column(nullable = false, length = 10)
     val period: String,
 
+    @Column(name = "monetary_unit", nullable = false, length = 10)
+    val monetaryUnit: String,
+
     @Column(name = "net_revenue", precision = 18, scale = 2)
     val netRevenue: BigDecimal,
 
