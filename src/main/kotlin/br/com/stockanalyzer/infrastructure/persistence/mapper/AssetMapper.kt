@@ -11,7 +11,8 @@ class AssetMapper {
         code = entity.code,
         name = entity.name,
         sector = entity.sector,
-        createdAt = entity.createdAt
+        createdAt = entity.createdAt,
+        sharesOutstanding = entity.sharesOutstanding
     )
 
     fun toEntity(domain: Asset): AssetJpaEntity = AssetJpaEntity(
@@ -19,6 +20,7 @@ class AssetMapper {
         code = domain.code,
         name = domain.name,
         sector = domain.sector,
-        createdAt = domain.createdAt
+        createdAt = domain.createdAt,
+        sharesOutstanding = domain.sharesOutstanding
     )
 }

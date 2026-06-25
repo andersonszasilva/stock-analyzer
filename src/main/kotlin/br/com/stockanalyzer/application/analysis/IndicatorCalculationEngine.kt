@@ -1,6 +1,7 @@
 package br.com.stockanalyzer.application.analysis
 
 import br.com.stockanalyzer.domain.model.FinancialStatement
+import br.com.stockanalyzer.domain.model.MonetaryUnit
 import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.MathContext
@@ -22,8 +23,23 @@ class IndicatorCalculationEngine {
         val revenueGrowth = if (stmts.size >= 2) growth(stmts[stmts.size - 2].netRevenue, latest.netRevenue) else zero
         val netIncomeGrowth = if (stmts.size >= 2) growth(stmts[stmts.size - 2].netIncome, latest.netIncome) else zero
 
-        val eps = if (latest.equity > zero) latest.netIncome.divide(latest.equity, scale, RoundingMode.HALF_UP) else zero
-        val bvps = latest.equity
+        val shares = req.sharesOutstanding
+        val unitMultiplier = when (latest.monetaryUnit) {
+            MonetaryUnit.UNITS -> BigDecimal.ONE
+            MonetaryUnit.THOUSANDS -> BigDecimal("1000")
+            MonetaryUnit.MILLIONS -> BigDecimal("1000000")
+            MonetaryUnit.BILLIONS -> BigDecimal("1000000000")
+        }
+
+        val (eps, bvps, dcfVal) = if (shares != null && shares > 0) {
+            val sharesBd = BigDecimal(shares)
+            val e = latest.netIncome.multiply(unitMultiplier, mc).divide(sharesBd, scale, RoundingMode.HALF_UP)
+            val b = latest.equity.multiply(unitMultiplier, mc).divide(sharesBd, scale, RoundingMode.HALF_UP)
+            val avgFcfPerShare = avgFcf.multiply(unitMultiplier, mc).divide(sharesBd, scale, RoundingMode.HALF_UP)
+            Triple(e, b, dcf(avgFcfPerShare, req.discountRate, req.dcfProjectionYears))
+        } else {
+            Triple(null as BigDecimal?, null as BigDecimal?, dcf(avgFcf, req.discountRate, req.dcfProjectionYears))
+        }
 
         return FinancialIndicators(
             grossMargin = margin(latest.grossProfit, latest.netRevenue),
@@ -38,8 +54,10 @@ class IndicatorCalculationEngine {
             revenueGrowthYoY = revenueGrowth,
             netIncomeGrowthYoY = netIncomeGrowth,
             fcfConversion = fcfConversion(latest),
-            grahamPrice = grahamPrice(eps, bvps),
-            dcfFairValue = dcf(avgFcf, req.discountRate, req.dcfProjectionYears)
+            grahamPrice = if (eps != null && bvps != null) grahamPrice(eps, bvps) else zero,
+            dcfFairValue = dcfVal,
+            eps = eps,
+            bvps = bvps
         )
     }
 
@@ -84,11 +102,9 @@ class IndicatorCalculationEngine {
         return product.sqrt(mc).setScale(scale, RoundingMode.HALF_UP)
     }
 
-    private fun dcf(avgFcf: BigDecimal, discountRate: BigDecimal, years: Int): BigDecimal {
-        if (avgFcf <= zero || discountRate <= zero) return zero
-        // Gordon Growth Model (perpetuidade): FCL_médio / taxa_desconto
-        // simplificado conforme decisão técnica do SDD
-        return avgFcf.divide(discountRate, scale, RoundingMode.HALF_UP)
+    private fun dcf(avgFcfPerShare: BigDecimal, discountRate: BigDecimal, years: Int): BigDecimal {
+        if (avgFcfPerShare <= zero || discountRate <= zero) return zero
+        return avgFcfPerShare.divide(discountRate, scale, RoundingMode.HALF_UP)
     }
 
     private fun List<BigDecimal>.average(): BigDecimal {

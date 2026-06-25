@@ -1,6 +1,7 @@
 package br.com.stockanalyzer.application.analysis
 
 import br.com.stockanalyzer.domain.model.FinancialStatement
+import br.com.stockanalyzer.domain.model.MonetaryUnit
 import br.com.stockanalyzer.domain.model.StatementPeriod
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -132,12 +133,34 @@ class IndicatorCalculationEngineTest {
     }
 
     @Test
-    fun `calcula preco Graham`() {
-        // Graham = sqrt(22.5 * LPA * VPA)
-        // LPA = netIncome / equity = 1500 / 10000 = 0.15
-        // VPA = equity = 10000
-        // Graham = sqrt(22.5 * 0.15 * 10000) = sqrt(33750) ≈ 183.7117
+    fun `graham zero sem sharesOutstanding`() {
         val indicators = engine.calculate(listOf(statement()), defaultRequest)
+        assertEquals(BigDecimal.ZERO, indicators.grahamPrice)
+        assertNull(indicators.eps)
+        assertNull(indicators.bvps)
+    }
+
+    @Test
+    fun `calcula preco Graham por acao`() {
+        // monetaryUnit = UNITS, sharesOutstanding = 100
+        // EPS = 1500 / 100 = 15.00
+        // BVPS = 10000 / 100 = 100.00
+        // Graham = sqrt(22.5 * 15 * 100) = sqrt(33750) ≈ 183.7117
+        val stmt = FinancialStatement(
+            id = UUID.randomUUID(), assetId = UUID.randomUUID(),
+            year = 2024, period = StatementPeriod.ANNUAL,
+            monetaryUnit = MonetaryUnit.UNITS,
+            netRevenue = BigDecimal("10000"), grossProfit = BigDecimal("4000"),
+            ebitda = BigDecimal("2500"), ebit = BigDecimal("2000"),
+            netIncome = BigDecimal("1500"), operatingCashFlow = BigDecimal("2200"),
+            freeCashFlow = BigDecimal("1800"), totalDebt = BigDecimal("5000"),
+            netDebt = BigDecimal("3000"), equity = BigDecimal("10000"),
+            totalAssets = BigDecimal("20000"), createdAt = LocalDateTime.now()
+        )
+        val req = defaultRequest.copy(sharesOutstanding = 100L)
+        val indicators = engine.calculate(listOf(stmt), req)
+        assertEquals(BigDecimal("15.0000"), indicators.eps)
+        assertEquals(BigDecimal("100.0000"), indicators.bvps)
         assertTrue(indicators.grahamPrice > BigDecimal("183") && indicators.grahamPrice < BigDecimal("184"))
     }
 

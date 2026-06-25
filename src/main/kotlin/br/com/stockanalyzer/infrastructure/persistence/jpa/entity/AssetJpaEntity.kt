@@ -20,5 +20,8 @@ class AssetJpaEntity(
     val sector: String?,
 
     @Column(name = "created_at", nullable = false)
-    val createdAt: LocalDateTime
+    val createdAt: LocalDateTime,
+
+    @Column(name = "shares_outstanding")
+    val sharesOutstanding: Long? = null
 )

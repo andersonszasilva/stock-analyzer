@@ -32,6 +32,12 @@
             <input type="text" id="sector" th:field="*{sector}" class="form-control" maxlength="100">
         </div>
 
+        <div class="mb-3">
+            <label for="sharesOutstanding" class="form-label">Número de ações</label>
+            <input type="number" id="sharesOutstanding" th:field="*{sharesOutstanding}" class="form-control" min="1">
+            <div class="form-text">Quantidade total de ações emitidas (ex: 12888700000)</div>
+        </div>
+
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary">Salvar</button>
             <a th:href="@{/assets}" class="btn btn-outline-secondary">Cancelar</a>

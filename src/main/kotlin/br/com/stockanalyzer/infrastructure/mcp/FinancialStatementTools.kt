@@ -120,7 +120,8 @@ class FinancialStatementTools(
             statementIds = statements.map { it.id },
             discountRate = BigDecimal(discountRate.toString()),
             taxRate = BigDecimal(taxRate.toString()),
-            dcfProjectionYears = dcfProjectionYears
+            dcfProjectionYears = dcfProjectionYears,
+            sharesOutstanding = asset.sharesOutstanding
         )
         return engine.calculate(statements, request)
     }

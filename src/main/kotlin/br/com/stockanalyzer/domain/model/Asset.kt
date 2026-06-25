@@ -8,5 +8,6 @@ data class Asset(
     val code: String,
     val name: String,
     val sector: String?,
-    val createdAt: LocalDateTime
+    val createdAt: LocalDateTime,
+    val sharesOutstanding: Long? = null
 )

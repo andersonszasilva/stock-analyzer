@@ -41,7 +41,7 @@ class AssetController(private val assetUseCase: AssetUseCase) {
     @GetMapping("/{id}/edit")
     fun editForm(@PathVariable id: UUID, model: Model): String {
         val asset = assetUseCase.findById(id) ?: return "redirect:/assets"
-        model.addAttribute("form", AssetForm(code = asset.code, name = asset.name, sector = asset.sector))
+        model.addAttribute("form", AssetForm(code = asset.code, name = asset.name, sector = asset.sector, sharesOutstanding = asset.sharesOutstanding))
         model.addAttribute("assetId", id)
         return "assets/form"
     }
@@ -72,6 +72,7 @@ class AssetController(private val assetUseCase: AssetUseCase) {
         code = code.trim().uppercase(),
         name = name.trim(),
         sector = sector?.trim()?.ifBlank { null },
-        createdAt = LocalDateTime.now()
+        createdAt = LocalDateTime.now(),
+        sharesOutstanding = sharesOutstanding
     )
 }

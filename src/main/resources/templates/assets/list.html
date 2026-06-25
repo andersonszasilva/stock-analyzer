@@ -23,6 +23,7 @@
             <th>Código</th>
             <th>Nome</th>
             <th>Setor</th>
+            <th class="text-end">Qtd. ações</th>
             <th class="text-end">Ações</th>
         </tr>
         </thead>
@@ -31,6 +32,7 @@
             <td th:text="${asset.code}"></td>
             <td th:text="${asset.name}"></td>
             <td th:text="${asset.sector ?: '—'}"></td>
+            <td class="text-end" th:text="${asset.sharesOutstanding != null} ? ${#numbers.formatInteger(asset.sharesOutstanding, 1, 'POINT')} : '—'"></td>
             <td class="text-end">
                 <a th:href="@{/assets/{id}/statements(id=${asset.id})}" class="btn btn-sm btn-outline-secondary">DREs</a>
                 <a th:href="@{/assets/{id}/edit(id=${asset.id})}" class="btn btn-sm btn-outline-primary">Editar</a>

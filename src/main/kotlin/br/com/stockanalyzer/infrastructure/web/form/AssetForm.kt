@@ -13,5 +13,7 @@ data class AssetForm(
     val name: String = "",
 
     @field:Size(max = 100)
-    val sector: String? = null
+    val sector: String? = null,
+
+    val sharesOutstanding: Long? = null
 )
