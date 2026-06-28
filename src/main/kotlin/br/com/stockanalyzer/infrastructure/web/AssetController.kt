@@ -21,6 +21,14 @@ class AssetController(private val assetUseCase: AssetUseCase) {
         return "assets/list"
     }
 
+    @GetMapping("/{id}")
+    fun show(@PathVariable id: UUID, model: Model): String {
+        val asset = assetUseCase.findById(id) ?: return "redirect:/assets"
+        model.addAttribute("asset", asset)
+        model.addAttribute("indicators", assetUseCase.findIndicatorsByAssetId(id))
+        return "assets/show"
+    }
+
     @GetMapping("/new")
     fun newForm(model: Model): String {
         model.addAttribute("form", AssetForm())

@@ -40,6 +40,7 @@
             <td class="text-end text-muted small"
                 th:text="${asset.lastCalculatedAt != null} ? ${#temporals.format(asset.lastCalculatedAt, 'dd/MM/yyyy HH:mm')} : '—'"></td>
             <td class="text-end">
+                <a th:href="@{/assets/{id}(id=${asset.id})}" class="btn btn-sm btn-outline-info">Ver</a>
                 <a th:href="@{/assets/{id}/statements(id=${asset.id})}" class="btn btn-sm btn-outline-secondary">DREs</a>
                 <a th:href="@{/assets/{id}/edit(id=${asset.id})}" class="btn btn-sm btn-outline-primary">Editar</a>
                 <form th:action="@{/assets/{id}/delete(id=${asset.id})}" method="post" class="d-inline"
