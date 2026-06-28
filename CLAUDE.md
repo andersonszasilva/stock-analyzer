@@ -81,6 +81,43 @@ claude mcp list
 
 Para verificar as ferramentas disponíveis no terminal: `/mcp`
 
+## Fonte de dados
+
+**Não busque dados financeiros online.** Todos os dados devem ser extraídos dos PDFs localizados em `docs/ativos/<ATIVO>/<ANO>/`. A estrutura é:
+
+```
+docs/ativos/
+├── ativo-01/
+│   ├── 2024/  (4T24.pdf)
+│   ├── 2025/  (1T25.pdf, 2T25.pdf, 3T25.pdf, 4T25.pdf)
+│   └── 2026/  (1T26.pdf)
+├── ativo-02/
+│   ├── 2024/  (2024.pdf)
+│   ├── 2025/  (1T25.pdf, 2T25.pdf, 3T25.pdf, 4T25.pdf)
+│   └── 2026/  (1T26.pdf)
+├── ativo-03/
+│   ├── 2024/  (4T24.pdf)
+│   ├── 2025/  (012025.pdf, 2T25.pdf, 3T25.pdf, 4T25.pdf)
+│   └── 2026/  (1T26.pdf)
+└── ativo-04/
+    ├── 2024/  (4T24.pdf)
+    ├── 2025/  (1T25.pdf, 2T25.pdf, 3T25.pdf, 4T25_2025.pdf, 4T25.pdf)
+    └── 2026/  (1T26.pdf)
+```
+
+### Tipos de PDF e dados disponíveis
+
+Existem dois formatos de PDF nos diretórios:
+
+| Formato | Exemplo | Contém |
+|---------|---------|--------|
+| **Release de resultados** (press release completo) | `4T24.pdf`, `4T25_2025.pdf` | DRE completa, Balanço Patrimonial, Fluxo de Caixa IFRS — todos os campos para `saveFinancialStatement` |
+| **Apresentação para investidores** (slides) | `1T25.pdf`, `2T25.pdf`, `3T25.pdf`, `4T25.pdf` | Apenas EBITDA Proforma, FCL recorrente e Dívida líquida expandida — **insuficiente** para salvar na plataforma |
+
+**Sempre prefira o release de resultados** (geralmente nomeado `4TXX.pdf` ou `4TXX_AAAA.pdf`) para extrair dados completos. Os slides trimestrais intermediários (1T, 2T, 3T) normalmente só têm dados resumidos.
+
+Cada PDF é o release de resultados trimestral ou anual da empresa. Leia o PDF correspondente ao período solicitado e extraia os dados a partir dele.
+
 ## Referências
 
 - Design detalhado: `docs/stock-analyzer-sdd.md`
