@@ -18,7 +18,9 @@ http://localhost:4000/mcp
       ├── findAllAssets
       ├── findStatementsByAssetCode
       ├── findStatementsByAssetCodeAndYear
-      └── calculateIndicators
+      ├── saveFinancialStatement
+      ├── calculateIndicators
+      └── findIndicatorsByAssetCode
 ```
 
 ---
@@ -45,9 +47,11 @@ O arquivo `.claude/settings.json` do projeto **não** registra servidores MCP �
 | Ferramenta | Descrição |
 |---|---|
 | `findAllAssets` | Lista todos os ativos cadastrados |
-| `findStatementsByAssetCode` | Retorna todos os DREs de um ativo pelo código (ex: `WEGE3`) |
-| `findStatementsByAssetCodeAndYear` | Retorna o DRE de um ativo em um ano específico |
-| `calculateIndicators` | Calcula indicadores financeiros (P/L, ROE, margem, etc.) para um ativo |
+| `findStatementsByAssetCode` | Retorna todas as DREs de um ativo pelo código |
+| `findStatementsByAssetCodeAndYear` | Retorna as DREs de um ativo em um ano específico |
+| `saveFinancialStatement` | Cadastra ou atualiza uma DRE (sobrescreve se já existir para mesmo ativo/ano/período) |
+| `calculateIndicators` | Calcula e persiste indicadores fundamentalistas (margens, ROE, ROIC, Graham, DCF, preço recomendado) |
+| `findIndicatorsByAssetCode` | Retorna os indicadores do último cálculo persistido de um ativo |
 
 Para ver as ferramentas ativas no Claude Code: `/mcp`
 
