@@ -6,6 +6,7 @@ import br.com.stockanalyzer.application.analysis.FinancialStatementUseCase
 import br.com.stockanalyzer.application.analysis.IndicatorCalculationEngine
 import br.com.stockanalyzer.application.asset.AssetUseCase
 import br.com.stockanalyzer.domain.model.Asset
+import br.com.stockanalyzer.domain.model.AssetIndicators
 import br.com.stockanalyzer.domain.model.FinancialStatement
 import br.com.stockanalyzer.domain.model.MonetaryUnit
 import br.com.stockanalyzer.domain.model.StatementPeriod
@@ -123,13 +124,44 @@ class FinancialStatementTools(
             dcfProjectionYears = dcfProjectionYears,
             sharesOutstanding = asset.sharesOutstanding
         )
+        val now = LocalDateTime.now()
         val indicators = engine.calculate(statements, request)
 
         assetUseCase.save(asset.copy(
             recommendedPrice = indicators.recommendedPrice,
-            lastCalculatedAt = LocalDateTime.now()
+            lastCalculatedAt = now,
+        ))
+
+        val existing = assetUseCase.findIndicatorsByAssetId(asset.id)
+        assetUseCase.saveIndicators(AssetIndicators(
+            id                  = existing?.id ?: UUID.randomUUID(),
+            assetId             = asset.id,
+            grossMargin         = indicators.grossMargin,
+            ebitdaMargin        = indicators.ebitdaMargin,
+            netMargin           = indicators.netMargin,
+            fcfMargin           = indicators.fcfMargin,
+            roe                 = indicators.roe,
+            roic                = indicators.roic,
+            roa                 = indicators.roa,
+            debtToEbitda        = indicators.debtToEbitda,
+            debtToEquity        = indicators.debtToEquity,
+            revenueGrowthYoY    = indicators.revenueGrowthYoY,
+            netIncomeGrowthYoY  = indicators.netIncomeGrowthYoY,
+            fcfConversion       = indicators.fcfConversion,
+            grahamPrice         = indicators.grahamPrice,
+            dcfFairValue        = indicators.dcfFairValue,
+            eps                 = indicators.eps,
+            bvps                = indicators.bvps,
+            recommendedPrice    = indicators.recommendedPrice,
+            calculatedAt        = now,
         ))
 
         return indicators
+    }
+
+    @Tool(description = "Retorna os indicadores fundamentalistas persistidos do último cálculo de um ativo (ROE, ROIC, ROA, margens, Graham Price, DCF, preço recomendado e outros). Use após calculateIndicators.")
+    fun findIndicatorsByAssetCode(assetCode: String): AssetIndicators? {
+        val asset = assetUseCase.findByCode(assetCode.uppercase()) ?: return null
+        return assetUseCase.findIndicatorsByAssetId(asset.id)
     }
 }

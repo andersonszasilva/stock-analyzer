@@ -1,0 +1,22 @@
+CREATE TABLE asset_indicators (
+    id                    UUID         PRIMARY KEY,
+    asset_id              UUID         NOT NULL UNIQUE REFERENCES assets(id),
+    gross_margin          NUMERIC(10,4) NOT NULL,
+    ebitda_margin         NUMERIC(10,4) NOT NULL,
+    net_margin            NUMERIC(10,4) NOT NULL,
+    fcf_margin            NUMERIC(10,4) NOT NULL,
+    roe                   NUMERIC(10,4) NOT NULL,
+    roic                  NUMERIC(10,4) NOT NULL,
+    roa                   NUMERIC(10,4) NOT NULL,
+    debt_to_ebitda        NUMERIC(10,4) NOT NULL,
+    debt_to_equity        NUMERIC(10,4) NOT NULL,
+    revenue_growth_yoy    NUMERIC(10,4) NOT NULL,
+    net_income_growth_yoy NUMERIC(10,4) NOT NULL,
+    fcf_conversion        NUMERIC(10,4) NOT NULL,
+    graham_price          NUMERIC(12,4) NOT NULL,
+    dcf_fair_value        NUMERIC(12,4) NOT NULL,
+    eps                   NUMERIC(12,4),
+    bvps                  NUMERIC(12,4),
+    recommended_price     NUMERIC(12,2),
+    calculated_at         TIMESTAMP    NOT NULL
+);
