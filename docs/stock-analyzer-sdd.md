@@ -4,8 +4,8 @@
 
 Prover uma aplicação com dois canais de acesso complementares:
 
-- **Interface web (Thymeleaf)** — cadastro de ativos e suas DREs
-- **Servidor MCP** — ferramentas que o modelo de IA no terminal invoca para consultar DREs e calcular indicadores fundamentalistas
+- **Interface web (Thymeleaf)** — cadastro de ativos (código, nome, setor)
+- **Servidor MCP** — importação de DREs via PDF, consultas e cálculo de indicadores fundamentalistas no terminal
 
 A análise narrativa e o parecer sobre o ativo acontecem no terminal, com o modelo chamando as ferramentas MCP conforme necessário.
 
@@ -22,16 +22,15 @@ A análise narrativa e o parecer sobre o ativo acontecem no terminal, com o mode
 ### Incluído
 
 - Cadastro de ativos (código, nome, setor) via interface web
-- Cadastro de DRE por ativo e período (trimestral ou anual) via interface web
-- Histórico de DREs por ativo na interface web
+- Importação de DRE via MCP: Claude Code lê o PDF e chama `saveFinancialStatement`
+- Visualização e edição manual de DREs via interface web
 - Cálculo automático de indicadores fundamentalistas via ferramenta MCP
-- Servidor MCP com transporte HTTP/SSE (Spring AI MCP Server)
+- Servidor MCP com transporte Streamable HTTP (Spring AI MCP Server)
 
 ### Excluído (v1)
 
 - Análise narrativa na interface web (acontece no terminal)
 - Importação automática de DRE via B3 ou CVM
-- Upload de PDF de DRE
 - Comparação entre ativos distintos (análise cross-asset)
 - Salvamento persistente de análises geradas pela IA
 
@@ -59,20 +58,28 @@ IndicatorTools                   FinancialStatementController
                    PostgreSQL
 ```
 
-### Fluxo — cadastro de dados (web)
+### Fluxo — cadastro de ativo (web)
 
 ```
-1. Usuário acessa a interface web e cadastra um ativo (código + nome)
-2. Usuário cadastra DREs do ativo por período
+1. Usuário acessa a interface web e cadastra um ativo (código + nome + setor)
+```
+
+### Fluxo — importação de DRE (terminal)
+
+```
+1. Usuário pede ao modelo para ler o PDF do release de resultados
+2. Modelo lê o PDF com a ferramenta Read
+3. Modelo extrai os dados financeiros das tabelas
+4. Modelo chama `saveFinancialStatement` para persistir a DRE
 ```
 
 ### Fluxo — análise (terminal)
 
 ```
 1. Usuário pede ao modelo no terminal para analisar um ativo
-2. Modelo chama a ferramenta MCP `find_statements_by_asset`
-3. Modelo chama a ferramenta MCP `calculate_indicators`
-4. Modelo recebe os indicadores e produz a análise narrativa
+2. Modelo chama `findStatementsByAssetCode` para buscar as DREs
+3. Modelo chama `calculateIndicators` para calcular os indicadores
+4. Modelo produz a análise narrativa com base nos indicadores
 5. Usuário lê o parecer diretamente no terminal
 ```
 
@@ -86,10 +93,13 @@ IndicatorTools                   FinancialStatementController
 // domain/model/Asset.kt
 data class Asset(
     val id: UUID,
-    val code: String,          // ex: "ITUB4"
-    val name: String,          // ex: "Itaú Unibanco"
-    val sector: String?,       // ex: "Financeiro"
-    val createdAt: LocalDateTime
+    val code: String,
+    val name: String,
+    val sector: String?,
+    val createdAt: LocalDateTime,
+    val sharesOutstanding: Long? = null,      // número de ações emitidas
+    val recommendedPrice: BigDecimal? = null, // preço recomendado (espelho de AssetIndicators)
+    val lastCalculatedAt: LocalDateTime? = null
 )
 ```
 
@@ -102,6 +112,7 @@ data class FinancialStatement(
     val assetId: UUID,
     val year: Int,
     val period: StatementPeriod,       // Q1, Q2, Q3, Q4, ANNUAL
+    val monetaryUnit: MonetaryUnit,    // UNITS, THOUSANDS, MILLIONS, BILLIONS
     val netRevenue: BigDecimal,        // Receita líquida
     val grossProfit: BigDecimal,       // Lucro bruto
     val ebitda: BigDecimal,
@@ -117,9 +128,38 @@ data class FinancialStatement(
 )
 
 enum class StatementPeriod { Q1, Q2, Q3, Q4, ANNUAL }
+enum class MonetaryUnit { UNITS, THOUSANDS, MILLIONS, BILLIONS }
 ```
 
-### 4.3 FinancialIndicators
+### 4.3 AssetIndicators
+
+```kotlin
+// domain/model/AssetIndicators.kt
+data class AssetIndicators(
+    val id: UUID,
+    val assetId: UUID,
+    val grossMargin: BigDecimal,
+    val ebitdaMargin: BigDecimal,
+    val netMargin: BigDecimal,
+    val fcfMargin: BigDecimal,
+    val roe: BigDecimal,
+    val roic: BigDecimal,
+    val roa: BigDecimal,
+    val debtToEbitda: BigDecimal,
+    val debtToEquity: BigDecimal,
+    val revenueGrowthYoY: BigDecimal,
+    val netIncomeGrowthYoY: BigDecimal,
+    val fcfConversion: BigDecimal,
+    val grahamPrice: BigDecimal,
+    val dcfFairValue: BigDecimal,
+    val eps: BigDecimal?,
+    val bvps: BigDecimal?,
+    val recommendedPrice: BigDecimal?,
+    val calculatedAt: LocalDateTime
+)
+```
+
+### 4.4 FinancialIndicators
 
 ```kotlin
 // application/analysis/FinancialIndicators.kt
@@ -148,7 +188,10 @@ data class FinancialIndicators(
 
     // Valuation
     val grahamPrice: BigDecimal,       // √(22,5 × LPA × VPA)
-    val dcfFairValue: BigDecimal       // FCL médio × fator perpétuo
+    val dcfFairValue: BigDecimal,      // FCL médio × fator perpétuo
+    val eps: BigDecimal? = null,       // Lucro por ação (Lucro líquido / ações)
+    val bvps: BigDecimal? = null,      // Valor patrimonial por ação
+    val recommendedPrice: BigDecimal? = null  // Média(Graham, DCF) × 0.70
 )
 ```
 
@@ -163,8 +206,11 @@ data class FinancialIndicators(
 interface AssetUseCase {
     fun save(asset: Asset): Asset
     fun findById(id: UUID): Asset?
+    fun findByCode(code: String): Asset?
     fun findAll(): List<Asset>
     fun delete(id: UUID)
+    fun saveIndicators(indicators: AssetIndicators): AssetIndicators
+    fun findIndicatorsByAssetId(assetId: UUID): AssetIndicators?
 }
 
 // application/analysis/FinancialStatementUseCase.kt
@@ -182,10 +228,11 @@ interface FinancialStatementUseCase {
 ```kotlin
 // application/analysis/AnalysisRequest.kt
 data class AnalysisRequest(
-    val statementIds: List<UUID>,   // DREs selecionadas para a análise
-    val discountRate: BigDecimal,   // taxa de desconto DCF (padrão: 10%)
-    val taxRate: BigDecimal,        // alíquota IR p/ ROIC (padrão: 34%)
-    val dcfProjectionYears: Int     // anos de projeção DCF (padrão: 5)
+    val statementIds: List<UUID>,
+    val discountRate: BigDecimal = BigDecimal("0.10"),
+    val taxRate: BigDecimal = BigDecimal("0.34"),
+    val dcfProjectionYears: Int = 5,
+    val sharesOutstanding: Long? = null   // necessário para calcular EPS, BVPS e preços por ação
 )
 ```
 
@@ -215,27 +262,46 @@ Expostas via Spring AI MCP Server com `@Tool`. O modelo no terminal descobre e i
 ```kotlin
 // infrastructure/mcp/FinancialStatementTools.kt
 @Component
-class FinancialStatementTools(
-    private val statementUseCase: FinancialStatementUseCase,
-    private val assetUseCase: AssetUseCase,
-    private val engine: IndicatorCalculationEngine
-) {
-    @Tool(description = "Lista todos os ativos cadastrados")
+class FinancialStatementTools(...) {
+
+    @Tool(description = "Lista todos os ativos cadastrados no sistema")
     fun findAllAssets(): List<Asset> { ... }
 
-    @Tool(description = "Lista todas as DREs de um ativo pelo código (ex: ITUB4)")
+    @Tool(description = "Lista todas as DREs de um ativo pelo código de bolsa")
     fun findStatementsByAssetCode(assetCode: String): List<FinancialStatement> { ... }
 
     @Tool(description = "Lista as DREs de um ativo filtradas por ano")
     fun findStatementsByAssetCodeAndYear(assetCode: String, year: Int): List<FinancialStatement> { ... }
 
-    @Tool(description = "Calcula indicadores fundamentalistas com base nas DREs de um ativo")
+    @Tool(description = "Cadastra ou atualiza uma DRE. Se já existir para o mesmo ativo/ano/período, sobrescreve.")
+    fun saveFinancialStatement(
+        assetCode: String,
+        year: Int,
+        period: String,          // Q1, Q2, Q3, Q4 ou ANNUAL
+        monetaryUnit: String,    // UNITS, THOUSANDS, MILLIONS ou BILLIONS
+        netRevenue: Double,
+        grossProfit: Double,
+        ebitda: Double,
+        ebit: Double,
+        netIncome: Double,
+        operatingCashFlow: Double,
+        freeCashFlow: Double,
+        totalDebt: Double,
+        netDebt: Double,
+        equity: Double,
+        totalAssets: Double
+    ): FinancialStatement { ... }
+
+    @Tool(description = "Calcula e persiste indicadores fundamentalistas com base nas DREs de um ativo")
     fun calculateIndicators(
         assetCode: String,
-        discountRate: Double = 0.10,
-        taxRate: Double = 0.34,
-        dcfProjectionYears: Int = 5
+        discountRate: Double,    // padrão: 10
+        taxRate: Double,         // padrão: 34
+        dcfProjectionYears: Int  // padrão: 5
     ): FinancialIndicators { ... }
+
+    @Tool(description = "Retorna os indicadores do último cálculo persistido de um ativo")
+    fun findIndicatorsByAssetCode(assetCode: String): AssetIndicators? { ... }
 }
 ```
 
@@ -270,9 +336,11 @@ class FinancialStatementTools(
 domain/
   model/
     Asset.kt
+    AssetIndicators.kt
     FinancialStatement.kt
   repository/
     AssetRepository.kt                 ← interface (porta)
+    AssetIndicatorsRepository.kt       ← interface (porta)
     FinancialStatementRepository.kt    ← interface (porta)
 
 application/
@@ -298,15 +366,19 @@ infrastructure/
   persistence/
     jpa/entity/
       AssetJpaEntity.kt
+      AssetIndicatorsJpaEntity.kt
       FinancialStatementJpaEntity.kt
     jpa/repository/
       SpringDataAssetRepository.kt
+      SpringDataAssetIndicatorsRepository.kt
       SpringDataFinancialStatementRepository.kt
     adapter/
       AssetRepositoryAdapter.kt
+      AssetIndicatorsRepositoryAdapter.kt
       FinancialStatementRepositoryAdapter.kt
     mapper/
       AssetMapper.kt
+      AssetIndicatorsMapper.kt
       FinancialStatementMapper.kt
 ```
 
@@ -314,11 +386,14 @@ infrastructure/
 
 ```sql
 CREATE TABLE assets (
-  id          UUID          NOT NULL PRIMARY KEY,
-  code        VARCHAR(10)   NOT NULL UNIQUE,   -- ex: ITUB4
-  name        VARCHAR(100)  NOT NULL,
-  sector      VARCHAR(100),
-  created_at  TIMESTAMP     NOT NULL
+  id                  UUID          NOT NULL PRIMARY KEY,
+  code                VARCHAR(10)   NOT NULL UNIQUE,
+  name                VARCHAR(100)  NOT NULL,
+  sector              VARCHAR(100),
+  created_at          TIMESTAMP     NOT NULL,
+  shares_outstanding  BIGINT,
+  recommended_price   NUMERIC(12,2),
+  last_calculated_at  TIMESTAMP
 );
 
 CREATE TABLE financial_statements (
@@ -326,6 +401,7 @@ CREATE TABLE financial_statements (
   asset_id        UUID           NOT NULL REFERENCES assets(id),
   year            INTEGER        NOT NULL,
   period          VARCHAR(10)    NOT NULL,   -- Q1/Q2/Q3/Q4/ANNUAL
+  monetary_unit   VARCHAR(10)    NOT NULL DEFAULT 'MILLIONS',  -- UNITS/THOUSANDS/MILLIONS/BILLIONS
   net_revenue     NUMERIC(18,2),
   gross_profit    NUMERIC(18,2),
   ebitda          NUMERIC(18,2),
@@ -339,6 +415,29 @@ CREATE TABLE financial_statements (
   total_assets    NUMERIC(18,2),
   created_at      TIMESTAMP      NOT NULL,
   CONSTRAINT uq_asset_period UNIQUE (asset_id, year, period)
+);
+
+CREATE TABLE asset_indicators (
+  id                    UUID          PRIMARY KEY,
+  asset_id              UUID          NOT NULL UNIQUE REFERENCES assets(id),
+  gross_margin          NUMERIC(10,4) NOT NULL,
+  ebitda_margin         NUMERIC(10,4) NOT NULL,
+  net_margin            NUMERIC(10,4) NOT NULL,
+  fcf_margin            NUMERIC(10,4) NOT NULL,
+  roe                   NUMERIC(10,4) NOT NULL,
+  roic                  NUMERIC(10,4) NOT NULL,
+  roa                   NUMERIC(10,4) NOT NULL,
+  debt_to_ebitda        NUMERIC(10,4) NOT NULL,
+  debt_to_equity        NUMERIC(10,4) NOT NULL,
+  revenue_growth_yoy    NUMERIC(10,4) NOT NULL,
+  net_income_growth_yoy NUMERIC(10,4) NOT NULL,
+  fcf_conversion        NUMERIC(10,4) NOT NULL,
+  graham_price          NUMERIC(12,4) NOT NULL,
+  dcf_fair_value        NUMERIC(12,4) NOT NULL,
+  eps                   NUMERIC(12,4),
+  bvps                  NUMERIC(12,4),
+  recommended_price     NUMERIC(12,2),
+  calculated_at         TIMESTAMP     NOT NULL
 );
 ```
 
@@ -355,19 +454,13 @@ dependencies {
 
 ## 9. Configuração do MCP no Claude Code
 
-Após subir a aplicação (`./gradlew bootRun`), registrar o servidor MCP:
+Após subir a aplicação (`./gradlew bootRun`), registrar o servidor MCP via CLI:
 
-```json
-// .claude/settings.json
-{
-  "mcpServers": {
-    "stock-analyzer": {
-      "type": "sse",
-      "url": "http://localhost:8080/sse"
-    }
-  }
-}
+```bash
+claude mcp add --transport http --scope local stock-analyzer http://localhost:4000/mcp
 ```
+
+O registro é armazenado em `~/.claude.json` (escopo `local` = vinculado ao projeto atual). O arquivo `.claude/settings.json` do projeto **não** registra servidores MCP.
 
 Para verificar as ferramentas disponíveis no terminal: `/mcp`
 
@@ -391,7 +484,8 @@ Para verificar as ferramentas disponíveis no terminal: `/mcp`
 
 | Decisão                        | Escolha                            | Motivo                                                              |
 |--------------------------------|------------------------------------|---------------------------------------------------------------------|
-| Cadastro de dados              | Interface web (Thymeleaf)          | Formulário é mais ergonômico para entrada manual de DREs            |
+| Cadastro de ativos             | Interface web (Thymeleaf)          | Formulário ergonômico para dados cadastrais simples                 |
+| Importação de DREs             | MCP tool (`saveFinancialStatement`) | Claude Code lê o PDF e extrai os dados; evita digitação manual     |
 | Integração com IA              | MCP (servidor)                     | Análise acontece no terminal; app é storage + cálculos              |
 | Transporte MCP                 | HTTP/SSE                           | Natural para Spring Boot WebMVC; não exige modo stdio               |
 | Cálculo de indicadores         | Kotlin puro (sem lib financeira)   | Fórmulas simples e transparentes; facilita auditoria                |
@@ -434,7 +528,7 @@ Para verificar as ferramentas disponíveis no terminal: `/mcp`
 
 - [x] **T17** — `@WebMvcTest` dos controllers
 - [x] **T18** — `@DataJpaTest` dos repositórios
-- [x] **T19** — Validação manual: cadastrar via web, analisar via terminal com DRE real
+- [x] **T19** — Validação manual: cadastrar ativo via web, importar DRE via MCP, analisar via terminal
 - [x] **T20** — Refinar descrições das ferramentas `@Tool` com base no uso real
 
 ---
