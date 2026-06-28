@@ -2,7 +2,9 @@
 
 ## Contexto
 
-A extração de dados financeiros de PDFs de resultado exige inteligência para interpretar tabelas em formatos variados por empresa. Em vez de embutir essa lógica no servidor, o modelo já tem essa capacidade nativamente — o Claude Code lê o PDF, extrai os dados e chama um **novo MCP tool de escrita** para cadastrar o `FinancialStatement` diretamente no banco.
+A extração de dados financeiros de PDFs de resultado exige inteligência para interpretar tabelas em formatos variados por empresa. Em vez de embutir essa lógica no servidor, o modelo já tem essa capacidade nativamente — o Claude Code lê o PDF, extrai os dados e chama um **MCP tool de escrita** para cadastrar o `FinancialStatement` diretamente no banco.
+
+A plataforma suporta os períodos `Q1`, `Q2`, `Q3`, `Q4` e `ANNUAL`. Na prática, o foco é em **relatórios anuais** — os releases trimestrais intermediários geralmente não contêm todos os campos necessários (veja `CLAUDE.md` — Tipos de PDF).
 
 ---
 
@@ -11,13 +13,13 @@ A extração de dados financeiros de PDFs de resultado exige inteligência para 
 ```
 Usuário (terminal Claude Code)
     │
-    │  "Leia o PDF docs/009512000101011.pdf e cadastre o resultado da PETR4"
+    │  "Leia o PDF docs/ativos/ativo-XX/2025/4T25.pdf e cadastre o resultado anual"
     ▼
 Claude Code
     ├── Lê o PDF nativamente (ferramenta Read)
-    ├── Identifica: empresa=PETR4, período=1T26 → Q1/2026
-    ├── Extrai valores das tabelas do relatório
-    └── Chama MCP tool: saveFinancialStatement(assetCode, year, period, ...)
+    ├── Identifica: empresa, ano (ex: 2025), period=ANNUAL
+    ├── Extrai valores das tabelas do relatório anual
+    └── Chama MCP tool: saveFinancialStatement(assetCode, year, period="ANNUAL", ...)
                                 │
                                 ▼
                     http://localhost:4000/mcp
@@ -29,48 +31,50 @@ Claude Code
                     PostgreSQL ✓
 ```
 
-**O que muda no servidor:** apenas um novo `@Tool` em `FinancialStatementTools.kt`.  
+**O que muda no servidor:** apenas um `@Tool` em `FinancialStatementTools.kt`.  
 **Sem PDFBox. Sem AI client. Sem upload web.**
 
 ---
 
-## Dados extraíveis do PDF (Petrobras 1T26)
+## Dados extraíveis do PDF (release de resultados anual)
 
 Claude Code lê as seguintes tabelas do relatório:
 
-| Tabela | Página | Campo do domínio | Rótulo no PDF |
-|---|---|---|---|
-| Tabela 11 — DRE | 19 | `netRevenue` | "Receita de vendas" |
-| Tabela 11 — DRE | 19 | `grossProfit` | "Lucro bruto" |
-| Tabela 11 — DRE | 19 | `ebit` | "Lucro antes do resultado financeiro, participações e tributos" |
-| Tabela 11 — DRE | 19 | `netIncome` | "Lucro líquido do período" |
-| Tabela 10 — EBITDA | 18 | `ebitda` | "EBITDA" (linha base, antes dos ajustes) |
-| Tabela 5 — Liquidez | 11 | `operatingCashFlow` | "Recursos gerados pelas atividades operacionais" |
-| Tabela 5 — Liquidez | 11 | `freeCashFlow` | "Fluxo de caixa livre" |
-| Tabela 6 — Endividamento | 13 | `totalDebt` | "Dívida Financeira" + "Arrendamentos" em R$ |
-| Tabela 6 — Endividamento | 13 | `netDebt` | "Dívida Líquida" em R$ |
-| Tabela 12 — Balanço | 20 | `equity` | "Patrimônio Líquido" |
-| Tabela 12 — Balanço | 20 | `totalAssets` | "Total do Ativo" |
+| Tabela | Campo do domínio | Rótulo típico no PDF |
+|---|---|---|
+| DRE | `netRevenue` | "Receita líquida de vendas" |
+| DRE | `grossProfit` | "Lucro bruto" |
+| DRE | `ebit` | "Lucro antes do resultado financeiro e tributos" |
+| DRE | `netIncome` | "Lucro líquido do período" |
+| Reconciliação EBITDA | `ebitda` | "EBITDA ajustado" |
+| Fluxo de Caixa | `operatingCashFlow` | "Caixa líquido gerado pelas atividades operacionais" |
+| Fluxo de Caixa | `freeCashFlow` | "Fluxo de caixa livre" |
+| Endividamento | `totalDebt` | "Dívida bruta" |
+| Endividamento | `netDebt` | "Dívida líquida" |
+| Balanço | `equity` | "Patrimônio líquido total" |
+| Balanço | `totalAssets` | "Total do ativo" |
 
-Período identificado pela capa: `1T26` → `Q1`, ano `2026`.
+O período (`Q1`–`Q4` ou `ANNUAL`) e o ano são identificados a partir da capa e das tabelas do PDF.
 
 ---
 
 ## O que mudar no servidor
 
-### `FinancialStatementTools.kt` — novo `@Tool`
+### `FinancialStatementTools.kt` — `@Tool`
 
 ```kotlin
 @Tool(description = """
-    Cadastra ou atualiza uma DRE de um ativo a partir dos dados extraídos de um relatório de resultado.
-    Todos os valores financeiros devem estar em R$ milhões.
+    Cadastra ou atualiza uma DRE anual de um ativo a partir dos dados extraídos de um release de resultados.
+    Todos os valores financeiros devem estar na unidade indicada por monetaryUnit (padrão: MILLIONS).
     O período deve ser: Q1, Q2, Q3, Q4 ou ANNUAL.
-    Se já existir uma DRE para o mesmo ativo, ano e período, ela será sobrescrita.
+    O monetaryUnit deve ser: UNITS, THOUSANDS, MILLIONS ou BILLIONS.
+    Se já existir uma DRE para o mesmo ativo e ano, ela será sobrescrita.
 """)
 fun saveFinancialStatement(
     assetCode: String,
     year: Int,
-    period: String,
+    period: String,       // Q1, Q2, Q3, Q4 ou ANNUAL
+    monetaryUnit: String,
     netRevenue: Double,
     grossProfit: Double,
     ebitda: Double,
@@ -122,23 +126,44 @@ Não há mudança em controllers, templates, build.gradle ou application.propert
 
 ## Fluxo de uso no terminal
 
+### Exemplo 1 — Relatório anual
+
 ```
 # 1. Garantir que a aplicação está rodando
 ./gradlew bootRun
 
 # 2. No Claude Code, solicitar a importação
-"Leia o arquivo docs/009512000101011.pdf,
- extraia os dados financeiros consolidados do período corrente
- e cadastre como DRE do ativo PETR4"
+"Leia o PDF docs/ativos/ativo-XX/2025/4T25.pdf,
+ extraia os dados financeiros consolidados do exercício anual de 2025
+ e cadastre como DRE anual do ativo XX"
 
 # Claude Code vai:
-# → Ler o PDF
-# → Identificar: 1T26 = Q1/2026, valores em R$ milhões
-# → Chamar saveFinancialStatement(assetCode="PETR4", year=2026, period="Q1", ...)
+# → Ler o PDF (release de resultados)
+# → Identificar: ano=2025, period=ANNUAL, valores em R$ milhões
+# → Chamar saveFinancialStatement(assetCode="XX", year=2025, period="ANNUAL", ...)
 # → Confirmar o cadastro
 
 # 3. Verificar o resultado
-# Claude Code chama findStatementsByAssetCode("PETR4") para confirmar
+# Claude Code chama findStatementsByAssetCode("XX") para confirmar
+```
+
+### Exemplo 2 — Relatório trimestral
+
+```
+# 2. No Claude Code, solicitar a importação do trimestre
+"Leia o PDF docs/ativos/ativo-XX/2025/3T25.pdf,
+ extraia os dados financeiros consolidados do 3º trimestre de 2025
+ e cadastre como DRE trimestral do ativo XX"
+
+# Claude Code vai:
+# → Ler o PDF (release de resultados trimestral)
+# → Identificar: ano=2025, period=Q3, valores em R$ milhões
+# → Chamar saveFinancialStatement(assetCode="XX", year=2025, period="Q3", ...)
+# → Confirmar o cadastro
+
+# Atenção: releases trimestrais intermediários (1T, 2T, 3T) frequentemente
+# são apresentações para investidores com dados resumidos — verifique se o PDF
+# contém todos os campos antes de importar (ver CLAUDE.md — Tipos de PDF).
 ```
 
 ---
@@ -149,25 +174,16 @@ Não há mudança em controllers, templates, build.gradle ou application.propert
 |---|---|---|
 | Onde ocorre a extração do PDF | Claude Code (terminal) | Evita dependência de AI client no servidor; o modelo já lê PDFs |
 | Onde ocorre o cadastro | Servidor via MCP tool | Mantém o banco como fonte de verdade |
-| Comportamento em duplicatas | Sobrescrever (reutiliza o ID existente) | Importações repetidas do mesmo trimestre devem corrigir valores |
-| Unidade dos valores | R$ milhões (explícito na description do tool) | Padrão dos relatórios brasileiros |
-| Pré-requisito | Ativo deve existir (cadastrado via web UI ou outro tool) | Separação de responsabilidades |
-
----
-
-## Ordem de implementação
-
-1. Adicionar `saveFinancialStatement` em `FinancialStatementTools.kt`
-2. Adicionar imports necessários (`StatementPeriod`, `LocalDateTime`, `UUID`)
-3. Testar unitariamente em `FinancialStatementToolsTest.kt`
-4. Reiniciar a aplicação e verificar com `/mcp` que o novo tool aparece (total: 5 ferramentas)
-5. Validar com o PDF de exemplo: pedir ao Claude Code para importar o 1T26 da PETR4
+| Periodicidade suportada | Q1, Q2, Q3, Q4, ANNUAL | Flexibilidade total; na prática o foco é em ANNUAL pois releases intermediários costumam ter dados incompletos |
+| Comportamento em duplicatas | Sobrescrever (reutiliza o ID existente) | Reimportações do mesmo ano devem corrigir valores |
+| Unidade dos valores | Configurável via `monetaryUnit` | Suporta ativos que reportam em diferentes moedas/escalas |
+| Pré-requisito | Ativo deve existir (cadastrado via web UI) | Separação de responsabilidades |
 
 ---
 
 ## Referências
 
-- PDF de exemplo: `docs/009512000101011.pdf` (Petrobras 1T26)
+- PDFs dos ativos: `docs/ativos/<ativo-XX>/<ANO>/`
 - Tools existentes: `infrastructure/mcp/FinancialStatementTools.kt`
 - Use case: `application/analysis/FinancialStatementUseCase.kt`
 - Domínio: `domain/model/FinancialStatement.kt`, `domain/model/StatementPeriod.kt`
