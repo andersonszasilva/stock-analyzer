@@ -108,8 +108,8 @@ class FinancialStatementTools(
     """)
     fun calculateIndicators(
         assetCode: String,
-        discountRate: Double = 0.10,
-        taxRate: Double = 0.34,
+        discountRate: Double = 10.0,
+        taxRate: Double = 34.0,
         dcfProjectionYears: Int = 5
     ): FinancialIndicators {
         val asset = assetUseCase.findByCode(assetCode.uppercase())
@@ -117,10 +117,11 @@ class FinancialStatementTools(
         val statements = statementUseCase.findByAsset(asset.id)
         require(statements.isNotEmpty()) { "Nenhuma DRE encontrada para '$assetCode'" }
 
+        val hundred = BigDecimal("100")
         val request = AnalysisRequest(
             statementIds = statements.map { it.id },
-            discountRate = BigDecimal(discountRate.toString()),
-            taxRate = BigDecimal(taxRate.toString()),
+            discountRate = BigDecimal(discountRate.toString()).divide(hundred, 6, java.math.RoundingMode.HALF_UP),
+            taxRate = BigDecimal(taxRate.toString()).divide(hundred, 6, java.math.RoundingMode.HALF_UP),
             dcfProjectionYears = dcfProjectionYears,
             sharesOutstanding = asset.sharesOutstanding
         )

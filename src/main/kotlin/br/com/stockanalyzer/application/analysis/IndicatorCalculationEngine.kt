@@ -102,12 +102,11 @@ class IndicatorCalculationEngine {
             grahamPriceVal > zero && dcfVal > zero ->
                 grahamPriceVal.add(dcfVal)
                     .divide(BigDecimal(2), 2, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal("0.70"))
                     .setScale(2, RoundingMode.HALF_UP)
             grahamPriceVal > zero ->
-                grahamPriceVal.multiply(BigDecimal("0.70")).setScale(2, RoundingMode.HALF_UP)
+                grahamPriceVal.setScale(2, RoundingMode.HALF_UP)
             dcfVal > zero ->
-                dcfVal.multiply(BigDecimal("0.70")).setScale(2, RoundingMode.HALF_UP)
+                dcfVal.setScale(2, RoundingMode.HALF_UP)
             else -> null
         }
 
