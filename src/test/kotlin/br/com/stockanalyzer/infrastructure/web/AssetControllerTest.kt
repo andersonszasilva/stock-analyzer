@@ -40,6 +40,16 @@ class AssetControllerTest {
     }
 
     @Test
+    fun `GET assets exibe contador com a quantidade de ativos`() {
+        val other = asset.copy(id = UUID.randomUUID(), code = "VALE3", name = "Vale")
+        `when`(assetUseCase.findAll()).thenReturn(listOf(asset, other))
+
+        mockMvc.perform(get("/assets"))
+            .andExpect(status().isOk)
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("title=\"2 ativos cadastrados\">2</span>")))
+    }
+
+    @Test
     fun `GET assets new retorna formulario vazio`() {
         mockMvc.perform(get("/assets/new"))
             .andExpect(status().isOk)

@@ -9,7 +9,12 @@
 <body>
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h3">Ativos</h1>
+        <h1 class="h3 mb-0">
+            Ativos
+            <span id="asset-count" class="badge rounded-pill text-bg-secondary align-middle fs-6"
+                  th:text="${#lists.size(assets)}"
+                  th:title="${#lists.size(assets) == 1} ? '1 ativo cadastrado' : ${#lists.size(assets)} + ' ativos cadastrados'">0</span>
+        </h1>
         <a th:href="@{/assets/new}" class="btn btn-primary">Novo ativo</a>
     </div>
 
